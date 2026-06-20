@@ -1,0 +1,647 @@
+<!-- PROTOTYPE - NOT FOR PRODUCTION
+     Question: If the player holds to slack off and releases to fake work as the boss approaches, does the near-miss greed loop feel tense and funny?
+     Date: 2026-06-20 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>老板来了! 摸鱼伪装赛 Prototype</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; overflow: hidden; touch-action: none; }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1b1f2f;
+    color: #1c2433;
+    font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .game {
+    position: relative;
+    width: min(100vw, 430px);
+    height: min(100vh, 760px);
+    min-height: 640px;
+    overflow: hidden;
+    background:
+      linear-gradient(#d8e8f4 0 24%, transparent 24%),
+      linear-gradient(90deg, #c8d5e5 0 5px, transparent 5px 86%, #c8d5e5 86% 87%, transparent 87%),
+      linear-gradient(#eef3f7, #dfe7ef 52%, #c8b7a0 52% 100%);
+  }
+  .game::before {
+    content: "";
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    top: 58px;
+    height: 88px;
+    border-radius: 4px;
+    background:
+      linear-gradient(90deg, #91d0ff 0 26%, #ffffff 26% 28%, #91d0ff 28% 55%, #ffffff 55% 57%, #91d0ff 57%),
+      linear-gradient(#9ec7e7, #78aacd);
+    border: 3px solid #edf7ff;
+    box-shadow: inset 0 -20px 0 rgba(255,255,255,.18);
+  }
+  .hud {
+    position: absolute;
+    z-index: 4;
+    left: 16px;
+    right: 16px;
+    top: 14px;
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    color: #263245;
+    font-weight: 700;
+  }
+  .chip {
+    min-width: 78px;
+    padding: 8px 10px;
+    border: 2px solid rgba(39, 56, 77, .18);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .72);
+    box-shadow: 0 3px 0 rgba(44, 55, 74, .1);
+  }
+  .chip small {
+    display: block;
+    color: #64748b;
+    font-size: 10px;
+    font-weight: 800;
+  }
+  .office {
+    position: absolute;
+    left: 22px;
+    right: 22px;
+    top: 160px;
+    bottom: 142px;
+  }
+  .door {
+    position: absolute;
+    right: -5px;
+    top: 12px;
+    width: 74px;
+    height: 240px;
+    border: 5px solid #7b5e47;
+    border-bottom: none;
+    background: #ccb395;
+    box-shadow: inset 12px 0 0 rgba(0,0,0,.08);
+  }
+  .door.warn { background: #d9bd8f; }
+  .door.danger { background: #efad7c; }
+  .shadow {
+    position: absolute;
+    right: 50px;
+    top: 102px;
+    width: 0;
+    height: 122px;
+    opacity: 0;
+    transform-origin: right top;
+    background: linear-gradient(90deg, rgba(42, 29, 28, 0), rgba(42, 29, 28, .28));
+    clip-path: polygon(100% 0, 0 42%, 0 100%, 100% 74%);
+    transition: width .18s linear, opacity .18s linear;
+  }
+  .boss {
+    position: absolute;
+    right: -86px;
+    top: 78px;
+    width: 88px;
+    height: 150px;
+    transition: right .1s linear;
+  }
+  .boss .head {
+    position: absolute;
+    left: 26px;
+    top: 0;
+    width: 42px;
+    height: 48px;
+    border-radius: 45% 45% 52% 52%;
+    background: #f0bc82;
+    border: 3px solid #3b2a28;
+  }
+  .boss .hair {
+    position: absolute;
+    left: 25px;
+    top: -2px;
+    width: 44px;
+    height: 20px;
+    border-radius: 18px 18px 4px 4px;
+    background: #31313a;
+  }
+  .boss .body {
+    position: absolute;
+    left: 18px;
+    top: 47px;
+    width: 58px;
+    height: 80px;
+    border-radius: 12px 12px 8px 8px;
+    background: #343c54;
+    border: 3px solid #22293b;
+  }
+  .boss .eyes {
+    position: absolute;
+    left: 37px;
+    top: 23px;
+    width: 22px;
+    height: 4px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .boss .eyes::before, .boss .eyes::after {
+    content: "";
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: #211a18;
+  }
+  .desk {
+    position: absolute;
+    left: 14px;
+    right: 76px;
+    bottom: 0;
+    height: 150px;
+    border-radius: 16px 16px 0 0;
+    background: linear-gradient(#aa7148, #7d4d30);
+    box-shadow: 0 -6px 0 #c9905c, inset 0 -14px 0 rgba(0,0,0,.1);
+  }
+  .person {
+    position: absolute;
+    left: 56px;
+    bottom: 86px;
+    width: 76px;
+    height: 126px;
+  }
+  .person .head {
+    width: 54px;
+    height: 58px;
+    margin-left: 10px;
+    border-radius: 48%;
+    background: #ffd1a3;
+    border: 3px solid #3d2d26;
+    position: relative;
+  }
+  .person .face {
+    position: absolute;
+    left: 14px;
+    top: 30px;
+    color: #37241e;
+    font-size: 18px;
+    font-weight: 900;
+  }
+  .person .body {
+    width: 72px;
+    height: 70px;
+    margin-top: -2px;
+    border-radius: 18px 18px 6px 6px;
+    background: #6aa1d8;
+    border: 3px solid #315a85;
+  }
+  .monitor {
+    position: absolute;
+    left: 120px;
+    right: 6px;
+    bottom: 70px;
+    height: 178px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 7px solid #242938;
+    background: #e9eef4;
+    box-shadow: 0 12px 0 #242938;
+  }
+  .monitor.slacking {
+    background:
+      radial-gradient(circle at 70% 22%, #ffd166 0 10px, transparent 11px),
+      linear-gradient(135deg, #ff6b6b, #feca57 54%, #48dbfb);
+  }
+  .monitor.work {
+    background: #eef3f8;
+  }
+  .screen-title {
+    font-size: 16px;
+    font-weight: 900;
+    color: #243044;
+    margin-bottom: 8px;
+  }
+  .work-lines span {
+    display: block;
+    height: 8px;
+    margin: 7px 0;
+    border-radius: 8px;
+    background: #a9b8ca;
+  }
+  .work-lines span:nth-child(2n) { width: 72%; }
+  .work-lines span:nth-child(3n) { width: 46%; }
+  .slack-card {
+    display: none;
+    color: #fff;
+    text-shadow: 0 2px 0 rgba(0,0,0,.2);
+  }
+  .slacking .work-lines { display: none; }
+  .slacking .slack-card { display: block; }
+  .video-box {
+    height: 96px;
+    border-radius: 16px;
+    background: rgba(0,0,0,.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 34px;
+    font-weight: 900;
+  }
+  .status {
+    position: absolute;
+    z-index: 5;
+    left: 18px;
+    right: 18px;
+    bottom: 100px;
+    min-height: 38px;
+    text-align: center;
+    color: #253044;
+    font-size: 16px;
+    font-weight: 900;
+  }
+  .danger-text {
+    color: #d92828;
+    animation: pulse .34s infinite alternate;
+  }
+  .near-text { color: #1f9f61; }
+  .caught-text { color: #b90f0f; }
+  .control {
+    position: absolute;
+    z-index: 6;
+    left: 18px;
+    right: 18px;
+    bottom: 18px;
+    height: 76px;
+    border: none;
+    border-radius: 22px;
+    background: linear-gradient(#ffdc6a, #ff9f1c);
+    color: #422800;
+    box-shadow: 0 9px 0 #b55d00, 0 16px 24px rgba(86, 48, 0, .28);
+    font-size: 24px;
+    font-weight: 900;
+    cursor: pointer;
+    user-select: none;
+  }
+  .control:active, .control.down {
+    transform: translateY(5px);
+    box-shadow: 0 4px 0 #b55d00, 0 8px 18px rgba(86, 48, 0, .24);
+    background: linear-gradient(#ff7b7b, #ff4757);
+    color: #fff;
+  }
+  .control:disabled {
+    background: #aeb8c5;
+    color: #fff;
+    box-shadow: 0 7px 0 #788291;
+  }
+  .overlay {
+    position: absolute;
+    z-index: 10;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(23, 19, 24, .76);
+  }
+  .overlay.show { display: flex; }
+  .card {
+    width: min(86%, 330px);
+    padding: 22px;
+    border-radius: 18px;
+    background: #fff8e9;
+    border: 4px solid #2b2430;
+    box-shadow: 0 14px 0 rgba(0,0,0,.22);
+    text-align: center;
+  }
+  .card h2 { margin: 0 0 12px; font-size: 26px; color: #dc2626; }
+  .card p { margin: 8px 0; font-weight: 800; color: #2c3444; }
+  .card button {
+    margin-top: 14px;
+    padding: 12px 18px;
+    border: 0;
+    border-radius: 12px;
+    background: #263245;
+    color: #fff;
+    font-weight: 900;
+    font-size: 16px;
+  }
+  .help {
+    position: absolute;
+    z-index: 3;
+    left: 24px;
+    right: 24px;
+    top: 106px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,.68);
+    color: #45546a;
+    font-size: 13px;
+    font-weight: 800;
+    text-align: center;
+  }
+  .shake { animation: shake .08s linear 6; }
+  @keyframes pulse { from { transform: scale(1); opacity: .8; } to { transform: scale(1.04); opacity: 1; } }
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    33% { transform: translateX(-5px); }
+    66% { transform: translateX(5px); }
+    100% { transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+<main class="game" id="game">
+  <section class="hud" aria-label="prototype stats">
+    <div class="chip"><small>摸鱼分</small><span id="score">0</span></div>
+    <div class="chip"><small>风险</small><span id="risk">1.0x</span></div>
+    <div class="chip"><small>连过</small><span id="streak">0</span></div>
+  </section>
+
+  <div class="help">按住「开始摸鱼」赚分。老板靠近时松手装工作。</div>
+
+  <section class="office">
+    <div class="door" id="door"></div>
+    <div class="shadow" id="shadow"></div>
+    <div class="boss" id="boss" aria-hidden="true">
+      <div class="hair"></div><div class="head"></div><div class="eyes"></div><div class="body"></div>
+    </div>
+    <div class="desk"></div>
+    <div class="person">
+      <div class="head"><div class="face" id="face">-_-</div></div>
+      <div class="body"></div>
+    </div>
+    <div class="monitor work" id="monitor">
+      <div class="screen-title" id="screenTitle">季度报表.xlsx</div>
+      <div class="work-lines"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="slack-card">
+        <div class="screen-title">摸鱼短视频</div>
+        <div class="video-box">+<span id="gain">1</span></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="status" id="status">撑过 60 秒。越晚松手,分越高。</div>
+  <button class="control" id="control">按住开始摸鱼</button>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h2 id="resultTitle">被抓了</h2>
+      <p id="resultScore"></p>
+      <p id="resultNote"></p>
+      <button id="restart">再摸一把</button>
+    </div>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const state = {
+  score: 0,
+  risk: 1,
+  streak: 0,
+  slacking: false,
+  gameOver: false,
+  bossPhase: 'away',
+  phaseTime: 0,
+  phaseDur: 1800,
+  bossProgress: 0,
+  lastTs: 0,
+  safeEscapes: 0,
+  roundTime: 0,
+  message: '撑过 60 秒。越晚松手,分越高。',
+  dangerWindow: false,
+  nearMiss: false,
+  cycleTouched: false,
+};
+
+const el = {
+  game: document.getElementById('game'),
+  score: document.getElementById('score'),
+  risk: document.getElementById('risk'),
+  streak: document.getElementById('streak'),
+  boss: document.getElementById('boss'),
+  door: document.getElementById('door'),
+  shadow: document.getElementById('shadow'),
+  monitor: document.getElementById('monitor'),
+  face: document.getElementById('face'),
+  status: document.getElementById('status'),
+  control: document.getElementById('control'),
+  overlay: document.getElementById('overlay'),
+  resultTitle: document.getElementById('resultTitle'),
+  resultScore: document.getElementById('resultScore'),
+  resultNote: document.getElementById('resultNote'),
+  restart: document.getElementById('restart'),
+  gain: document.getElementById('gain'),
+  screenTitle: document.getElementById('screenTitle'),
+};
+
+function rand(min, max) {
+  return min + Math.random() * (max - min);
+}
+
+function setPhase(phase) {
+  const hadNearMiss = state.nearMiss;
+  state.bossPhase = phase;
+  state.phaseTime = 0;
+  state.nearMiss = false;
+
+  if (phase === 'away') {
+    state.cycleTouched = false;
+    state.phaseDur = rand(1700, 2900);
+    state.message = '安全窗口: 可以摸鱼。';
+  } else if (phase === 'warning') {
+    state.phaseDur = rand(950, 1450);
+    state.message = '走廊有脚步声...';
+  } else if (phase === 'inspect') {
+    state.phaseDur = rand(650, 920);
+    state.message = '老板探头!';
+  } else if (phase === 'leaving') {
+    state.phaseDur = rand(520, 760);
+    state.message = hadNearMiss ? '刚才差点完了,但你装得很忙。' : '安全通过。';
+  }
+}
+
+function startSlack() {
+  if (state.gameOver) return;
+  state.slacking = true;
+  state.cycleTouched = true;
+  el.control.classList.add('down');
+}
+
+function stopSlack() {
+  if (state.gameOver) return;
+  if (state.slacking && state.bossPhase === 'inspect') {
+    state.nearMiss = true;
+    state.safeEscapes++;
+    state.streak++;
+    state.score += Math.round(18 * state.risk);
+    state.message = '极限切回! +' + Math.round(18 * state.risk);
+    flashStatus('near-text');
+  }
+  state.slacking = false;
+  el.control.classList.remove('down');
+}
+
+function caught() {
+  state.gameOver = true;
+  state.slacking = false;
+  el.control.disabled = true;
+  el.overlay.classList.add('show');
+  el.game.classList.add('shake');
+  el.resultTitle.textContent = '被老板抓了';
+  el.resultScore.textContent = '摸鱼分: ' + Math.floor(state.score);
+  const notes = [
+    '失败原因: 老板已经站背后了,你还在刷视频。',
+    '失败原因: 你切回 Excel 的速度慢了 0.5 秒。',
+    '失败原因: 屏幕太亮,摸鱼证据过于清晰。',
+    '失败原因: 你的表情比电脑更可疑。'
+  ];
+  el.resultNote.textContent = notes[Math.floor(Math.random() * notes.length)];
+}
+
+function win() {
+  state.gameOver = true;
+  state.slacking = false;
+  el.control.disabled = true;
+  el.overlay.classList.add('show');
+  el.resultTitle.textContent = '午休成功';
+  el.resultScore.textContent = '摸鱼分: ' + Math.floor(state.score);
+  el.resultNote.textContent = '称号: 带薪隐身术大师。极限切回 ' + state.safeEscapes + ' 次。';
+}
+
+function reset() {
+  state.score = 0;
+  state.risk = 1;
+  state.streak = 0;
+  state.slacking = false;
+  state.gameOver = false;
+  state.safeEscapes = 0;
+  state.roundTime = 0;
+  state.lastTs = performance.now();
+  el.control.disabled = false;
+  el.overlay.classList.remove('show');
+  el.game.classList.remove('shake');
+  setPhase('away');
+}
+
+function updateBoss(dt) {
+  state.phaseTime += dt;
+  const p = Math.min(state.phaseTime / state.phaseDur, 1);
+  state.dangerWindow = false;
+
+  if (state.bossPhase === 'away') {
+    state.bossProgress = 0;
+    if (p >= 1) setPhase('warning');
+  } else if (state.bossPhase === 'warning') {
+    state.bossProgress = p * 0.55;
+    if (p > 0.65) state.message = '影子越来越近!';
+    if (p >= 1) setPhase('inspect');
+  } else if (state.bossPhase === 'inspect') {
+    state.bossProgress = 1;
+    state.dangerWindow = true;
+    state.message = '松手! 装工作!';
+    if (state.slacking && p > 0.22) caught();
+    if (p >= 1 && !state.gameOver) {
+      if (!state.slacking && state.cycleTouched && !state.nearMiss) {
+        state.streak++;
+        state.safeEscapes++;
+      }
+      setPhase('leaving');
+    }
+  } else if (state.bossPhase === 'leaving') {
+    state.bossProgress = 1 - p;
+    if (p >= 1) setPhase('away');
+  }
+}
+
+function updateScore(dt) {
+  if (!state.slacking || state.gameOver) return;
+  const phaseRisk =
+    state.bossPhase === 'away' ? 1 :
+    state.bossPhase === 'warning' ? 2.1 :
+    state.bossPhase === 'inspect' ? 4.8 : 1;
+  state.risk = Math.min(9.9, state.risk + dt * 0.9 * phaseRisk);
+  const gain = dt * 20 * state.risk;
+  state.score += gain;
+  el.gain.textContent = Math.max(1, Math.floor(state.risk));
+}
+
+function decayRisk(dt) {
+  if (state.slacking || state.gameOver) return;
+  state.risk = Math.max(1, state.risk - dt * 1.8);
+}
+
+function render() {
+  el.score.textContent = Math.floor(state.score);
+  el.risk.textContent = state.risk.toFixed(1) + 'x';
+  el.streak.textContent = state.streak;
+
+  el.monitor.classList.toggle('slacking', state.slacking);
+  el.monitor.classList.toggle('work', !state.slacking);
+  el.control.textContent = state.slacking ? '松手装工作!' : '按住开始摸鱼';
+  el.face.textContent = state.gameOver ? 'X_X' : state.slacking ? 'o_o' : '-_-';
+  el.screenTitle.textContent = state.slacking ? '摸鱼短视频' : (state.dangerWindow ? '紧急会议纪要.docx' : '季度报表.xlsx');
+
+  const right = -86 + state.bossProgress * 84;
+  el.boss.style.right = right + 'px';
+  el.shadow.style.width = (state.bossProgress * 190) + 'px';
+  el.shadow.style.opacity = state.bossProgress > 0.18 ? 1 : 0;
+  el.door.className = 'door' + (state.bossPhase === 'warning' ? ' warn' : '') + (state.bossPhase === 'inspect' ? ' danger' : '');
+
+  el.status.textContent = state.message;
+  el.status.className = 'status' + (state.dangerWindow ? ' danger-text' : '');
+}
+
+function flashStatus(className) {
+  el.status.className = 'status ' + className;
+  setTimeout(() => {
+    if (!state.gameOver) el.status.className = 'status';
+  }, 420);
+}
+
+function loop(ts) {
+  const dt = Math.min((ts - state.lastTs) / 1000, 0.05);
+  state.lastTs = ts;
+
+  if (!state.gameOver) {
+    state.roundTime += dt;
+    updateBoss(dt * 1000);
+    updateScore(dt);
+    decayRisk(dt);
+    if (state.roundTime >= 60) win();
+  }
+
+  render();
+  requestAnimationFrame(loop);
+}
+
+el.control.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  startSlack();
+});
+el.control.addEventListener('pointerup', e => {
+  e.preventDefault();
+  stopSlack();
+});
+el.control.addEventListener('pointercancel', stopSlack);
+el.control.addEventListener('pointerleave', stopSlack);
+document.addEventListener('keydown', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    startSlack();
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') {
+    e.preventDefault();
+    stopSlack();
+  }
+});
+el.restart.addEventListener('click', reset);
+
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
