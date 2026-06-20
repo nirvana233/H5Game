@@ -1,0 +1,961 @@
+<!-- PROTOTYPE - NOT FOR PRODUCTION
+     Question: 物理合成核心循环是否好玩?自写圆形物理手感是否稳定?
+     Date: 2026-06-20 -->
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>合成宇宙 Cosmos Merge</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #050510;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+    cursor: none;
+  }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────
+// CONFIG — 所有可调参数集中于此
+// ─────────────────────────────────────────────
+const CONFIG = {
+  // 逻辑分辨率
+  W: 400,
+  H: 620,
+
+  // 物理参数
+  GRAVITY: 800,          // px/s² 重力
+  RESTITUTION: 0.15,     // 壁面/地面弹性系数(宁低勿高防乱弹)
+  FRICTION: 0.06,        // 切向摩擦系数
+  DAMPING: 0.985,        // 每帧速度衰减(空气阻力模拟)
+  SLEEP_SPEED: 8,        // 速度低于此值置零(防微抖)
+  SUB_STEPS: 3,          // 每帧物理子步数
+  SOLVE_ITERS: 3,        // 每子步碰撞求解迭代次数
+  FIXED_DT: 1 / 120,    // 子步时间步长
+
+  // 场地
+  WALL_LEFT: 30,
+  WALL_RIGHT: 370,
+  GROUND: 590,
+  DEATH_LINE: 80,        // y < DEATH_LINE 且静止 → 死亡线
+  DEATH_GRACE: 1500,     // 越线后持续多少 ms 才判定 Game Over
+
+  // 投放控制
+  DROP_COOLDOWN: 420,    // 落下后冷却 ms
+
+  // 天体半径表(7 级)
+  RADII: [12, 18, 26, 36, 48, 62, 80],
+
+  // 天体颜色(径向渐变:内色/外色)
+  COLORS: [
+    { inner: '#8899aa', outer: '#223344', glow: '#4466aa' },  // 0 尘埃
+    { inner: '#bb8866', outer: '#442211', glow: '#bb6633' },  // 1 陨石
+    { inner: '#aaccee', outer: '#223355', glow: '#55aaff' },  // 2 月球
+    { inner: '#66cc88', outer: '#114422', glow: '#33ff88' },  // 3 行星
+    { inner: '#ffdd44', outer: '#443300', glow: '#ffaa00' },  // 4 恒星
+    { inner: '#ff88ff', outer: '#330033', glow: '#ff44ff' },  // 5 中子星
+    { inner: '#220022', outer: '#000000', glow: '#9900ff' },  // 6 黑洞(清场用,特殊渲染)
+  ],
+
+  // 天体名称
+  NAMES: ['尘埃','陨石','月球','行星','恒星','中子星','黑洞'],
+
+  // 合成得分
+  SCORES: [10, 20, 40, 80, 160, 320, 640],
+
+  // 投放时随机级别范围
+  DROP_MIN_LEVEL: 0,
+  DROP_MAX_LEVEL: 2,
+
+  // 黑洞吞噬半径倍数
+  BLACK_HOLE_ABSORB_MULT: 3.5,
+
+  // 黑洞动画时长 ms
+  BLACK_HOLE_DURATION: 1800,
+
+  // 合成特效:新天体放大再回弹
+  MERGE_BOUNCE_DUR: 300,
+  MERGE_BOUNCE_SCALE: 1.5,
+};
+
+// ─────────────────────────────────────────────
+// Canvas 初始化 + DPR 高清屏适配
+// ─────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let DPR = window.devicePixelRatio || 1;
+let SCALE = 1; // 逻辑像素→CSS像素缩放比
+
+function resizeCanvas() {
+  DPR = window.devicePixelRatio || 1;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // 等比缩放,竖屏适配
+  SCALE = Math.min(vw / CONFIG.W, vh / CONFIG.H);
+  const cssW = CONFIG.W * SCALE;
+  const cssH = CONFIG.H * SCALE;
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  canvas.width = cssW * DPR;
+  canvas.height = cssH * DPR;
+  ctx.setTransform(SCALE * DPR, 0, 0, SCALE * DPR, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ─────────────────────────────────────────────
+// 游戏状态
+// ─────────────────────────────────────────────
+let bodies = [];        // 所有天体
+let particles = [];     // 粒子特效
+let blackHoles = [];    // 黑洞清场动画实例
+let score = 0;
+let highLevel = 0;
+let gameOver = false;
+let dropCooldown = 0;
+let deathTimer = 0;     // 越线计时 ms
+let cursorX = CONFIG.W / 2;
+let nextLevel = randomDropLevel();
+let currentLevel = randomDropLevel();
+let lastTime = 0;
+let physAccum = 0;      // 物理累加器(秒)
+
+function randomDropLevel() {
+  return CONFIG.DROP_MIN_LEVEL + Math.floor(Math.random() * (CONFIG.DROP_MAX_LEVEL - CONFIG.DROP_MIN_LEVEL + 1));
+}
+
+// ─────────────────────────────────────────────
+// 天体工厂
+// ─────────────────────────────────────────────
+function makeBody(x, y, level) {
+  return {
+    x, y,
+    vx: 0, vy: 0,
+    r: CONFIG.RADII[level],
+    level,
+    merged: false,
+    // 合成放大特效
+    bounceTimer: 0,
+    bounceScale: 1,
+    // 是否被黑洞吸入(动画中)
+    absorbed: false,
+    absorbTarget: null,
+    absorbStart: null,
+    absorbProgress: 0,
+  };
+}
+
+// ─────────────────────────────────────────────
+// 粒子特效(极简对象池)
+// ─────────────────────────────────────────────
+const POOL = [];
+function spawnParticles(x, y, color, count) {
+  count = count || 8;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 / count) * i + Math.random() * 0.3;
+    const speed = 60 + Math.random() * 80;
+    const p = POOL.pop() || {};
+    p.x = x; p.y = y;
+    p.vx = Math.cos(angle) * speed;
+    p.vy = Math.sin(angle) * speed;
+    p.life = 1;
+    p.decay = 0.04 + Math.random() * 0.03;
+    p.r = 3 + Math.random() * 3;
+    p.color = color;
+    particles.push(p);
+  }
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vy += CONFIG.GRAVITY * 0.3 * dt;
+    p.life -= p.decay;
+    if (p.life <= 0) {
+      POOL.push(particles.splice(i, 1)[0]);
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.save();
+    ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────
+// 物理核心
+// ─────────────────────────────────────────────
+
+/** 重力积分:一个子步 sh 秒 */
+function integrateBody(b, sh) {
+  if (b.absorbed) return; // 被吸入的天体由黑洞驱动,跳过常规物理
+  b.vy += CONFIG.GRAVITY * sh;
+  b.x += b.vx * sh;
+  b.y += b.vy * sh;
+}
+
+/** 边界碰撞(左/右/底) */
+function solveBoundary(b) {
+  if (b.absorbed) return;
+  const L = CONFIG.WALL_LEFT + b.r;
+  const R = CONFIG.WALL_RIGHT - b.r;
+  const Bot = CONFIG.GROUND - b.r;
+
+  if (b.x < L) {
+    b.x = L;
+    b.vx = Math.abs(b.vx) * CONFIG.RESTITUTION;
+  } else if (b.x > R) {
+    b.x = R;
+    b.vx = -Math.abs(b.vx) * CONFIG.RESTITUTION;
+  }
+  if (b.y > Bot) {
+    b.y = Bot;
+    b.vy = -Math.abs(b.vy) * CONFIG.RESTITUTION;
+    // 地面摩擦
+    b.vx *= (1 - CONFIG.FRICTION * 3);
+  }
+}
+
+/** 圆-圆碰撞求解(含弹性+摩擦+位置修正) */
+function solveCircleCollisions() {
+  const n = bodies.length;
+  for (let i = 0; i < n; i++) {
+    const a = bodies[i];
+    if (a.absorbed || a.merged) continue;
+    for (let j = i + 1; j < n; j++) {
+      const b = bodies[j];
+      if (b.absorbed || b.merged) continue;
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const distSq = dx * dx + dy * dy;
+      const minDist = a.r + b.r;
+
+      if (distSq >= minDist * minDist) continue;
+
+      const dist = Math.sqrt(distSq) || 0.001;
+      // 法线方向(a→b)
+      const nx = dx / dist;
+      const ny = dy / dist;
+
+      // 位置修正:各推一半 overlap
+      const overlap = minDist - dist;
+      const push = overlap * 0.5 + 0.1; // 额外 0.1 防持续穿透
+      a.x -= nx * push;
+      a.y -= ny * push;
+      b.x += nx * push;
+      b.y += ny * push;
+
+      // 速度响应:沿法线方向的相对速度
+      const rvx = b.vx - a.vx;
+      const rvy = b.vy - a.vy;
+      const relVelN = rvx * nx + rvy * ny;
+
+      // 已经分离,不处理速度
+      if (relVelN > 0) continue;
+
+      // 弹性冲量(质量相等简化)
+      const e = CONFIG.RESTITUTION;
+      const imp = -(1 + e) * relVelN * 0.5;
+      a.vx -= imp * nx;
+      a.vy -= imp * ny;
+      b.vx += imp * nx;
+      b.vy += imp * ny;
+
+      // 切向摩擦
+      const tx = -ny, ty = nx;
+      const relVelT = rvx * tx + rvy * ty;
+      const jt = -relVelT * CONFIG.FRICTION * 0.5;
+      a.vx -= jt * tx;
+      a.vy -= jt * ty;
+      b.vx += jt * tx;
+      b.vy += jt * ty;
+    }
+  }
+}
+
+/** 低速休眠 + 整体阻尼 */
+function applyDamping() {
+  for (const b of bodies) {
+    if (b.absorbed) continue;
+    b.vx *= CONFIG.DAMPING;
+    b.vy *= CONFIG.DAMPING;
+    if (Math.abs(b.vx) < CONFIG.SLEEP_SPEED * 0.3) b.vx = 0;
+    if (Math.abs(b.vy) < CONFIG.SLEEP_SPEED * 0.3) b.vy = 0;
+  }
+}
+
+/** 主物理步进:固定步长累加器 */
+function physicsUpdate(dt) {
+  physAccum += dt;
+  const h = CONFIG.FIXED_DT;
+  // 最多 8 个完整步防卡死
+  let steps = 0;
+  while (physAccum >= h && steps < 8) {
+    physAccum -= h;
+    steps++;
+    // 每个 h 内分 SUB_STEPS 子步积分,每子步后做碰撞迭代
+    const sh = h / CONFIG.SUB_STEPS;
+    for (let sub = 0; sub < CONFIG.SUB_STEPS; sub++) {
+      for (const b of bodies) integrateBody(b, sh);
+      for (let iter = 0; iter < CONFIG.SOLVE_ITERS; iter++) {
+        solveCircleCollisions();
+        for (const b of bodies) solveBoundary(b);
+      }
+    }
+    applyDamping();
+  }
+}
+
+// ─────────────────────────────────────────────
+// 合成检测(本帧统一处理,merged 标记防连环)
+// ─────────────────────────────────────────────
+function checkMerges() {
+  const n = bodies.length;
+  const removeIndices = new Set();
+  const toAdd = [];
+
+  for (let i = 0; i < n; i++) {
+    const a = bodies[i];
+    if (a.merged || a.absorbed) continue;
+    for (let j = i + 1; j < n; j++) {
+      const b = bodies[j];
+      if (b.merged || b.absorbed) continue;
+      if (a.level !== b.level) continue;
+      if (a.level >= 6) continue; // 黑洞不再合成
+
+      const dx = b.x - a.x;
+      const dy = b.y - a.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      // 触发距离略大于半径和,合成更顺滑
+      if (dist > (a.r + b.r) * 1.05) continue;
+
+      // 双方标记已合成,防止本帧再次参与
+      a.merged = true;
+      b.merged = true;
+      removeIndices.add(i);
+      removeIndices.add(j);
+
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2;
+      const newLevel = a.level + 1;
+      score += CONFIG.SCORES[newLevel];
+      if (newLevel > highLevel) highLevel = newLevel;
+
+      if (newLevel === 6) {
+        // 两颗中子星合成 → 黑洞清场,不生成普通天体
+        triggerBlackHole(mx, my);
+      } else {
+        const nb = makeBody(mx, my, newLevel);
+        nb.vx = (a.vx + b.vx) * 0.3;
+        nb.vy = (a.vy + b.vy) * 0.3 - 80; // 向上弹一下增加趣味
+        nb.bounceTimer = CONFIG.MERGE_BOUNCE_DUR;
+        nb.bounceScale = CONFIG.MERGE_BOUNCE_SCALE;
+        toAdd.push(nb);
+        spawnParticles(mx, my, CONFIG.COLORS[newLevel].glow, 10);
+      }
+      break; // a 已标记,退出内层
+    }
+  }
+
+  // 统一移除已合成天体
+  if (removeIndices.size > 0) {
+    bodies = bodies.filter((_, idx) => !removeIndices.has(idx));
+  }
+  for (const nb of toAdd) bodies.push(nb);
+}
+
+// ─────────────────────────────────────────────
+// 黑洞清场机制
+// ─────────────────────────────────────────────
+function triggerBlackHole(x, y) {
+  const bh = {
+    x, y,
+    r: CONFIG.RADII[6],
+    phase: 'absorb',    // 'absorb' | 'collapse'
+    elapsed: 0,
+    absorbDur: CONFIG.BLACK_HOLE_DURATION * 0.6,
+    collapseDur: CONFIG.BLACK_HOLE_DURATION * 0.4,
+    targets: [],        // 被吸入天体列表
+  };
+
+  // 搜集吸收半径内所有天体并标记
+  const absorbR = bh.r * CONFIG.BLACK_HOLE_ABSORB_MULT;
+  const absorbR2 = absorbR * absorbR;
+  for (const b of bodies) {
+    if (b.absorbed || b.merged) continue;
+    const dx = b.x - x;
+    const dy = b.y - y;
+    if (dx * dx + dy * dy < absorbR2) {
+      b.absorbed = true;
+      b.absorbStart = { x: b.x, y: b.y };
+      b.absorbProgress = 0;
+      b.vx = 0; b.vy = 0;
+      score += CONFIG.SCORES[b.level];
+      bh.targets.push(b);
+    }
+  }
+
+  blackHoles.push(bh);
+  spawnParticles(x, y, '#cc44ff', 20);
+}
+
+function updateBlackHoles(dt) {
+  const dtMs = dt * 1000;
+  for (let i = blackHoles.length - 1; i >= 0; i--) {
+    const bh = blackHoles[i];
+    bh.elapsed += dtMs;
+
+    if (bh.phase === 'absorb') {
+      const progress = Math.min(bh.elapsed / bh.absorbDur, 1);
+      // 驱动各目标向黑洞圆心插值移动(缓出曲线)
+      const ease = progress * progress * (3 - 2 * progress); // smoothstep
+      for (const t of bh.targets) {
+        t.absorbProgress = ease;
+        t.x = t.absorbStart.x + (bh.x - t.absorbStart.x) * ease;
+        t.y = t.absorbStart.y + (bh.y - t.absorbStart.y) * ease;
+      }
+      if (progress >= 1) {
+        // 移除所有被吸入天体
+        const targetSet = new Set(bh.targets);
+        bodies = bodies.filter(b => !targetSet.has(b));
+        bh.targets = [];
+        bh.phase = 'collapse';
+        bh.elapsed = 0;
+        // 塌缩闪光粒子
+        spawnParticles(bh.x, bh.y, '#ffffff', 25);
+        spawnParticles(bh.x, bh.y, '#9900ff', 20);
+      }
+    } else {
+      // 塌缩阶段结束 → 移除黑洞
+      if (bh.elapsed >= bh.collapseDur) {
+        blackHoles.splice(i, 1);
+      }
+    }
+  }
+}
+
+function drawBlackHoles(now) {
+  for (const bh of blackHoles) {
+    ctx.save();
+    ctx.translate(bh.x, bh.y);
+
+    if (bh.phase === 'absorb') {
+      const progress = Math.min(bh.elapsed / bh.absorbDur, 1);
+      const rotAngle = now * 0.003;
+
+      // 外层吸收范围指示圈(渐隐)
+      const absorbR = bh.r * CONFIG.BLACK_HOLE_ABSORB_MULT;
+      ctx.beginPath();
+      ctx.arc(0, 0, absorbR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(153,0,255,${0.25 * (1 - progress)})`;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // 旋转光环(三层)
+      for (let ring = 0; ring < 3; ring++) {
+        const rr = bh.r * (1.15 + ring * 0.35);
+        const startA = rotAngle + ring * 0.9;
+        ctx.beginPath();
+        ctx.arc(0, 0, rr, startA, startA + Math.PI * 1.4);
+        ctx.strokeStyle = `rgba(180,${50 + ring * 30},255,${0.8 - ring * 0.2})`;
+        ctx.lineWidth = 2.5 - ring * 0.5;
+        ctx.stroke();
+      }
+
+      // 黑洞本体
+      const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, bh.r);
+      grad.addColorStop(0, '#000000');
+      grad.addColorStop(0.6, '#110022');
+      grad.addColorStop(1, '#330055');
+      ctx.beginPath();
+      ctx.arc(0, 0, bh.r, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+    } else {
+      // 塌缩闪光:向外扩散并消失
+      const p = bh.elapsed / bh.collapseDur;
+      const alpha = Math.max(0, 1 - p);
+      const cr = bh.r * (0.5 + p * 2.5);
+      const flashGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, cr);
+      flashGrad.addColorStop(0, `rgba(255,200,255,${alpha})`);
+      flashGrad.addColorStop(0.5, `rgba(153,0,255,${alpha * 0.6})`);
+      flashGrad.addColorStop(1, 'rgba(153,0,255,0)');
+      ctx.beginPath();
+      ctx.arc(0, 0, cr, 0, Math.PI * 2);
+      ctx.fillStyle = flashGrad;
+      ctx.fill();
+    }
+
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────
+// 死亡线检测
+// ─────────────────────────────────────────────
+function checkDeathLine(dt) {
+  let overLine = false;
+  for (const b of bodies) {
+    if (b.absorbed || b.merged) continue;
+    const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+    // 顶部越过死亡线且近似静止
+    if (b.y - b.r < CONFIG.DEATH_LINE && speed < CONFIG.SLEEP_SPEED * 2) {
+      overLine = true;
+      break;
+    }
+  }
+  if (overLine) {
+    deathTimer += dt * 1000;
+    if (deathTimer >= CONFIG.DEATH_GRACE) {
+      gameOver = true;
+    }
+  } else {
+    deathTimer = 0;
+  }
+}
+
+// ─────────────────────────────────────────────
+// 投放
+// ─────────────────────────────────────────────
+function dropBody() {
+  if (gameOver || dropCooldown > 0) return;
+
+  const r = CONFIG.RADII[currentLevel];
+  const x = Math.max(CONFIG.WALL_LEFT + r, Math.min(CONFIG.WALL_RIGHT - r, cursorX));
+  const b = makeBody(x, CONFIG.DEATH_LINE + r + 2, currentLevel);
+  b.vy = 30; // 微小初速向下,避免卡在死亡线附近
+  bodies.push(b);
+
+  dropCooldown = CONFIG.DROP_COOLDOWN;
+  currentLevel = nextLevel;
+  nextLevel = randomDropLevel();
+}
+
+// ─────────────────────────────────────────────
+// 渲染
+// ─────────────────────────────────────────────
+function drawBody(b, now) {
+  // 被吸入中:随进度缩小
+  if (b.absorbed) {
+    const scale = Math.max(0, 1 - b.absorbProgress * 0.95);
+    if (scale < 0.03) return;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.scale(scale, scale);
+    drawBodyCore(b);
+    ctx.restore();
+    return;
+  }
+
+  // 合成弹跳特效:sin 曲线放大后回弹
+  let sc = 1;
+  if (b.bounceTimer > 0) {
+    const t = 1 - b.bounceTimer / CONFIG.MERGE_BOUNCE_DUR;
+    sc = 1 + (b.bounceScale - 1) * Math.sin(t * Math.PI);
+  }
+
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  if (sc !== 1) ctx.scale(sc, sc);
+  drawBodyCore(b);
+  ctx.restore();
+}
+
+function drawBodyCore(b) {
+  const c = CONFIG.COLORS[b.level];
+  const r = b.r;
+
+  // 外发光晕
+  const glowGrad = ctx.createRadialGradient(0, 0, r * 0.4, 0, 0, r * 2);
+  glowGrad.addColorStop(0, c.glow + '55');
+  glowGrad.addColorStop(1, c.glow + '00');
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 2, 0, Math.PI * 2);
+  ctx.fillStyle = glowGrad;
+  ctx.fill();
+
+  // 主体径向渐变(高光偏左上)
+  const grad = ctx.createRadialGradient(-r * 0.3, -r * 0.3, r * 0.05, 0, 0, r);
+  grad.addColorStop(0, c.inner);
+  grad.addColorStop(1, c.outer);
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // 边缘描边
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, Math.PI * 2);
+  ctx.strokeStyle = c.glow + '99';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // 名称文字(等级识别)
+  const fontSize = Math.max(9, r * 0.38);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${fontSize}px Arial`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(CONFIG.NAMES[b.level], 0, 0);
+}
+
+function drawScene(now) {
+  const W = CONFIG.W, H = CONFIG.H;
+
+  // 背景
+  const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+  bgGrad.addColorStop(0, '#050510');
+  bgGrad.addColorStop(1, '#0a0a22');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // 静态星空背景
+  drawStars();
+
+  // 场地墙壁(左/右/底)
+  ctx.strokeStyle = '#223355';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(CONFIG.WALL_LEFT, 0);
+  ctx.lineTo(CONFIG.WALL_LEFT, CONFIG.GROUND);
+  ctx.lineTo(CONFIG.WALL_RIGHT, CONFIG.GROUND);
+  ctx.lineTo(CONFIG.WALL_RIGHT, 0);
+  ctx.stroke();
+
+  // 地面实体填充
+  ctx.fillStyle = '#0d0d2b';
+  ctx.fillRect(CONFIG.WALL_LEFT + 1, CONFIG.GROUND, CONFIG.WALL_RIGHT - CONFIG.WALL_LEFT - 1, H - CONFIG.GROUND);
+
+  // 死亡线(有越线时红色闪烁)
+  const deathAlpha = deathTimer > 0 ? 0.45 + 0.45 * Math.sin(now * 0.012) : 0.22;
+  ctx.save();
+  ctx.strokeStyle = `rgba(255,50,50,${deathAlpha})`;
+  ctx.lineWidth = 1.5;
+  ctx.setLineDash([7, 5]);
+  ctx.beginPath();
+  ctx.moveTo(CONFIG.WALL_LEFT, CONFIG.DEATH_LINE);
+  ctx.lineTo(CONFIG.WALL_RIGHT, CONFIG.DEATH_LINE);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // 天体
+  for (const b of bodies) drawBody(b, now);
+
+  // 黑洞
+  drawBlackHoles(now);
+
+  // 粒子
+  drawParticles();
+
+  // 投放预览(非 Game Over 状态)
+  if (!gameOver) {
+    drawDropPreview(now);
+  }
+
+  // HUD
+  drawHUD(now);
+
+  // Game Over 覆盖
+  if (gameOver) drawGameOver();
+}
+
+function drawDropPreview(now) {
+  const r = CONFIG.RADII[currentLevel];
+  const px = Math.max(CONFIG.WALL_LEFT + r, Math.min(CONFIG.WALL_RIGHT - r, cursorX));
+
+  // 投放引导线
+  ctx.save();
+  ctx.strokeStyle = 'rgba(120,160,255,0.2)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  ctx.moveTo(px, CONFIG.DEATH_LINE + r);
+  ctx.lineTo(px, CONFIG.GROUND);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+
+  // 预投放天体(冷却中半透明)
+  const alpha = dropCooldown > 0 ? 0.28 : 0.85;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  const ghost = makeBody(px, CONFIG.DEATH_LINE + r + 2, currentLevel);
+  drawBody(ghost, now);
+  ctx.restore();
+}
+
+// 星空(固定点位,不重新生成)
+const STARS = (() => {
+  const arr = [];
+  // 简单线性同余伪随机,保证每次一致
+  let seed = 42;
+  const rand = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
+  for (let i = 0; i < 60; i++) {
+    arr.push({
+      x: CONFIG.WALL_LEFT + rand() * (CONFIG.WALL_RIGHT - CONFIG.WALL_LEFT),
+      y: rand() * CONFIG.GROUND,
+      r: 0.4 + rand() * 1.2,
+      a: 0.25 + rand() * 0.5,
+    });
+  }
+  return arr;
+})();
+
+function drawStars() {
+  for (const s of STARS) {
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(200,220,255,${s.a})`;
+    ctx.fill();
+  }
+}
+
+function drawHUD(now) {
+  const W = CONFIG.W;
+
+  // 左上:分数
+  ctx.save();
+  ctx.fillStyle = '#aaccff';
+  ctx.font = 'bold 15px Arial';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(`${score}`, 38, 8);
+  ctx.fillStyle = '#556688';
+  ctx.font = '10px Arial';
+  ctx.fillText('分数', 38, 25);
+  ctx.restore();
+
+  // 最高等级
+  if (highLevel > 0) {
+    ctx.save();
+    ctx.fillStyle = CONFIG.COLORS[highLevel].glow;
+    ctx.font = '10px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`最高: ${CONFIG.NAMES[highLevel]}`, 38, 38);
+    ctx.restore();
+  }
+
+  // 死亡线警告
+  if (deathTimer > 400) {
+    ctx.save();
+    ctx.globalAlpha = 0.55 + 0.45 * Math.sin(now * 0.016);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillText('危险!越界!', W / 2, CONFIG.DEATH_LINE - 4);
+    ctx.restore();
+  }
+
+  // 右上 Next 预览
+  drawNextPreview();
+}
+
+function drawNextPreview() {
+  const W = CONFIG.W;
+  const nx = W - 28;
+  const ny = 16;
+  ctx.save();
+  ctx.fillStyle = '#556688';
+  ctx.font = '9px Arial';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillText('NEXT', nx, ny);
+
+  const pr = Math.min(CONFIG.RADII[nextLevel] * 0.65, 20);
+  ctx.translate(nx, ny + 14 + pr);
+  const gc = CONFIG.COLORS[nextLevel];
+
+  // 外发光
+  const glowG = ctx.createRadialGradient(0, 0, pr * 0.3, 0, 0, pr * 1.6);
+  glowG.addColorStop(0, gc.glow + '66');
+  glowG.addColorStop(1, gc.glow + '00');
+  ctx.beginPath();
+  ctx.arc(0, 0, pr * 1.6, 0, Math.PI * 2);
+  ctx.fillStyle = glowG;
+  ctx.fill();
+
+  // 主体
+  const bg = ctx.createRadialGradient(-pr * 0.25, -pr * 0.25, 0, 0, 0, pr);
+  bg.addColorStop(0, gc.inner);
+  bg.addColorStop(1, gc.outer);
+  ctx.beginPath();
+  ctx.arc(0, 0, pr, 0, Math.PI * 2);
+  ctx.fillStyle = bg;
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawGameOver() {
+  const W = CONFIG.W, H = CONFIG.H;
+
+  // 半透明遮罩
+  ctx.fillStyle = 'rgba(0,0,10,0.78)';
+  ctx.fillRect(0, 0, W, H);
+
+  // 面板背景
+  const px = W / 2 - 105, py = H / 2 - 90;
+  const pw = 210, ph = 180;
+  ctx.fillStyle = '#0a0a22';
+  ctx.strokeStyle = '#334477';
+  ctx.lineWidth = 2;
+  roundRect(ctx, px, py, pw, ph, 14);
+  ctx.fill();
+  ctx.stroke();
+
+  // 标题
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#ff5555';
+  ctx.font = 'bold 26px Arial';
+  ctx.fillText('GAME OVER', W / 2, py + 40);
+
+  // 分数
+  ctx.fillStyle = '#ccddff';
+  ctx.font = '15px Arial';
+  ctx.fillText(`分数  ${score}`, W / 2, py + 72);
+
+  // 最高天体
+  if (highLevel > 0) {
+    ctx.fillStyle = CONFIG.COLORS[highLevel].glow;
+    ctx.font = '13px Arial';
+    ctx.fillText(`最高天体  ${CONFIG.NAMES[highLevel]}`, W / 2, py + 96);
+  }
+
+  // 重开提示(轻微呼吸)
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 14px Arial';
+  ctx.fillText('点击任意处重开', W / 2, py + 145);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ─────────────────────────────────────────────
+// 重开
+// ─────────────────────────────────────────────
+function resetGame() {
+  bodies = [];
+  particles = [];
+  blackHoles = [];
+  score = 0;
+  highLevel = 0;
+  gameOver = false;
+  dropCooldown = 0;
+  deathTimer = 0;
+  physAccum = 0;
+  currentLevel = randomDropLevel();
+  nextLevel = randomDropLevel();
+}
+
+// ─────────────────────────────────────────────
+// 输入 — Pointer Events 统一覆盖触控和鼠标
+// ─────────────────────────────────────────────
+function pointerToLogicalX(e) {
+  const rect = canvas.getBoundingClientRect();
+  return (e.clientX - rect.left) / SCALE;
+}
+
+canvas.addEventListener('pointermove', e => {
+  cursorX = pointerToLogicalX(e);
+});
+
+canvas.addEventListener('pointerdown', e => {
+  e.preventDefault();
+  cursorX = pointerToLogicalX(e);
+  if (gameOver) {
+    resetGame();
+    return;
+  }
+  dropBody();
+});
+
+canvas.addEventListener('pointerup', e => {
+  e.preventDefault();
+});
+
+// 防止移动端长按菜单
+canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+// ─────────────────────────────────────────────
+// 主游戏循环
+// ─────────────────────────────────────────────
+function gameLoop(now) {
+  requestAnimationFrame(gameLoop);
+
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // 最大 50ms 防跳帧卡顿
+  lastTime = now;
+
+  if (!gameOver) {
+    // 投放冷却倒计时
+    if (dropCooldown > 0) dropCooldown -= dt * 1000;
+
+    // 物理步进
+    physicsUpdate(dt);
+
+    // 合成检测
+    checkMerges();
+
+    // 黑洞动画更新
+    updateBlackHoles(dt);
+
+    // 粒子更新
+    updateParticles(dt);
+
+    // 合成弹跳计时递减
+    for (const b of bodies) {
+      if (b.bounceTimer > 0) b.bounceTimer -= dt * 1000;
+    }
+
+    // 死亡线检测
+    checkDeathLine(dt);
+  }
+
+  // 渲染
+  drawScene(now);
+}
+
+lastTime = performance.now();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
