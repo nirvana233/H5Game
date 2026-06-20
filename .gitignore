@@ -1,4 +1,9 @@
-.DS_Store
-*.log
-node_modules/
-.env
+# Serena 本地配置
+.serena/project.local.yml
+.serena/memories/
+
+# Claude Code 本地配置
+.claude/settings.local.json
+
+# 会话日志
+production/session-logs/
