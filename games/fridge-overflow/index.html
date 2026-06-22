@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>冰箱爆仓了</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="game" data-game aria-label="冰箱爆仓了">
+    <header class="hud" aria-label="游戏状态">
+      <div class="chip"><small>分数</small><strong data-score>0</strong></div>
+      <div class="chip"><small>最高</small><strong data-best>0</strong></div>
+      <div class="chip"><small>难度</small><strong data-level>1</strong></div>
+      <div class="chip"><small>种类</small><strong data-type-count>5</strong></div>
+    </header>
+
+    <section class="fridge" aria-label="冰箱棋盘">
+      <div class="fridge-title">把食物塞进冰箱，3 个相邻同类自动清</div>
+      <div class="board" data-board>
+        <div class="board-cells" data-board-cells></div>
+        <div class="board-layer" data-board-layer></div>
+      </div>
+    </section>
+
+    <section class="meters" aria-label="压力与时间">
+      <div class="meter-row">
+        <span>压力 <b data-pressure-text>0%</b></span>
+        <div class="pressure-meter"><i data-pressure-fill></i></div>
+      </div>
+      <div class="meter-row">
+        <span>倒计时</span>
+        <div class="timer-meter"><i data-timer-fill></i></div>
+      </div>
+      <div class="pending" data-pending aria-label="待处理区">
+        <span></span><span></span><span></span>
+      </div>
+    </section>
+
+    <section class="conveyor" data-conveyor aria-label="传送带">
+      <div class="conveyor-label">当前食物</div>
+      <button class="restart-mini" type="button" data-restart>重开</button>
+    </section>
+
+    <p class="status" data-status>拖动食物开始整理</p>
+
+    <section class="result hidden" data-result aria-label="结算卡">
+      <div class="result-card">
+        <p class="eyebrow">冰箱爆仓了</p>
+        <h1 data-result-title>整理大师</h1>
+        <p data-result-body>冰箱管理指数 0%。</p>
+        <p class="result-stats" data-result-stats>分数 0</p>
+        <button type="button" data-restart>再来一局</button>
+        <button type="button" class="secondary" data-share>分享成绩</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="./src/game.bundle.js"></script>
+</body>
+</html>

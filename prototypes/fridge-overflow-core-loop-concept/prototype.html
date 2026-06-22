@@ -1,0 +1,821 @@
+<!-- PROTOTYPE - NOT FOR PRODUCTION
+     Question: If the player drags shaped food into a 6x8 fridge grid and clears adjacent groups of three matching foods, does the five-second conveyor create readable pressure and satisfying rescue moments?
+     Date: 2026-06-21 -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>冰箱爆仓了 Prototype</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; width: 100%; min-height: 100%; overflow: hidden; touch-action: none; }
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #182233;
+    color: #263245;
+    font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .game {
+    width: min(100vw, 430px);
+    height: min(100vh, 790px);
+    min-height: 680px;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(#dff4ff, #f8fbff 42%, #e6f0f7);
+  }
+  .hud {
+    position: absolute;
+    z-index: 5;
+    left: 14px;
+    right: 14px;
+    top: 12px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 7px;
+  }
+  .chip {
+    padding: 7px 6px;
+    border: 2px solid #b8d7ec;
+    border-radius: 10px;
+    background: rgba(255,255,255,.82);
+    box-shadow: 0 3px 0 rgba(88,116,136,.18);
+    text-align: center;
+    font-weight: 900;
+    font-size: 16px;
+  }
+  .chip small {
+    display: block;
+    margin-bottom: 2px;
+    color: #6a7f91;
+    font-size: 10px;
+  }
+  .fridge-shell {
+    position: absolute;
+    left: 20px;
+    right: 20px;
+    top: 72px;
+    height: 505px;
+    border: 8px solid #8ac3e8;
+    border-radius: 24px 24px 18px 18px;
+    background: #f9fcff;
+    box-shadow:
+      inset 0 0 0 5px #d5edf9,
+      0 12px 0 rgba(48,84,108,.18);
+  }
+  .fridge-shell.danger {
+    border-color: #ff6b6b;
+    animation: shake .1s linear infinite;
+  }
+  .fridge-title {
+    position: absolute;
+    left: 18px;
+    top: 10px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: #dff4ff;
+    color: #36627d;
+    font-size: 12px;
+    font-weight: 900;
+  }
+  .grid {
+    --cell: 45px;
+    position: absolute;
+    left: 50%;
+    top: 48px;
+    width: calc(var(--cell) * 6);
+    height: calc(var(--cell) * 8);
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: repeat(6, var(--cell));
+    grid-template-rows: repeat(8, var(--cell));
+    border: 3px solid #abcfe4;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ebf7ff;
+  }
+  .cell {
+    width: var(--cell);
+    height: var(--cell);
+    border: 1px solid #c8e0ee;
+    background: rgba(255,255,255,.72);
+  }
+  .cell.preview-ok { background: #b8f7d0; }
+  .cell.preview-bad { background: #ffb4b4; }
+  .cell.clearing { animation: clearFlash .24s ease-in-out 2; }
+  .placed {
+    position: absolute;
+    z-index: 2;
+    border: 3px solid rgba(42,53,68,.42);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 900;
+    text-shadow: 0 2px 0 rgba(0,0,0,.22);
+    box-shadow: inset 0 -8px 0 rgba(0,0,0,.1), 0 3px 0 rgba(0,0,0,.12);
+    transition: transform .16s ease, opacity .16s ease;
+  }
+  .placed.clear-out {
+    transform: scale(.15) rotate(-8deg);
+    opacity: 0;
+  }
+  .status {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    top: 588px;
+    height: 36px;
+    text-align: center;
+    color: #36546c;
+    font-weight: 900;
+    font-size: 15px;
+  }
+  .status.hot { color: #dd3b3b; }
+  .pressure {
+    position: absolute;
+    left: 24px;
+    right: 24px;
+    top: 630px;
+    height: 10px;
+    border-radius: 10px;
+    background: #cbd8e2;
+    overflow: hidden;
+  }
+  .pressure span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #74d680, #ffd166, #ff4d4d);
+  }
+  .belt {
+    position: absolute;
+    left: 14px;
+    right: 14px;
+    bottom: 18px;
+    height: 116px;
+    border-radius: 18px;
+    background: #2a3547;
+    box-shadow: inset 0 10px 0 rgba(255,255,255,.08), 0 -4px 0 rgba(52,68,91,.16);
+    color: #fff;
+  }
+  .belt-title {
+    position: absolute;
+    left: 14px;
+    top: 10px;
+    font-size: 12px;
+    font-weight: 900;
+    color: #c9d6e4;
+  }
+  .timer {
+    position: absolute;
+    left: 14px;
+    right: 126px;
+    bottom: 12px;
+    height: 9px;
+    border-radius: 9px;
+    background: rgba(255,255,255,.18);
+    overflow: hidden;
+  }
+  .timer span {
+    display: block;
+    height: 100%;
+    width: 100%;
+    border-radius: inherit;
+    background: #78e08f;
+  }
+  .pending {
+    position: absolute;
+    right: 14px;
+    top: 12px;
+    display: flex;
+    gap: 5px;
+  }
+  .pending-dot {
+    width: 18px;
+    height: 18px;
+    border-radius: 6px;
+    background: rgba(255,255,255,.16);
+    border: 2px solid rgba(255,255,255,.25);
+  }
+  .pending-dot.full { background: #ff6b6b; }
+  .food {
+    position: absolute;
+    z-index: 8;
+    border: 3px solid rgba(255,255,255,.56);
+    border-radius: 12px;
+    box-shadow: inset 0 -8px 0 rgba(0,0,0,.12), 0 6px 0 rgba(0,0,0,.18);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    font-weight: 900;
+    text-shadow: 0 2px 0 rgba(0,0,0,.25);
+    cursor: grab;
+    user-select: none;
+    touch-action: none;
+  }
+  .food.dragging {
+    opacity: .88;
+    transform: scale(1.05);
+    cursor: grabbing;
+  }
+  .food-label {
+    pointer-events: none;
+    font-size: 13px;
+    line-height: 1.1;
+    text-align: center;
+  }
+  .overlay {
+    position: absolute;
+    z-index: 20;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(20,27,39,.72);
+  }
+  .overlay.show { display: flex; }
+  .card {
+    width: min(86%, 330px);
+    padding: 22px;
+    border: 4px solid #263245;
+    border-radius: 20px;
+    background: #fffaf0;
+    text-align: center;
+    box-shadow: 0 14px 0 rgba(0,0,0,.22);
+  }
+  .card h2 {
+    margin: 0 0 12px;
+    color: #e03131;
+    font-size: 28px;
+  }
+  .card p {
+    margin: 8px 0;
+    color: #2d384a;
+    font-weight: 900;
+  }
+  .card button {
+    margin-top: 14px;
+    border: 0;
+    border-radius: 12px;
+    padding: 12px 18px;
+    background: #263245;
+    color: #fff;
+    font-size: 16px;
+    font-weight: 900;
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+  @keyframes clearFlash {
+    0%, 100% { background: #fff; }
+    50% { background: #b8f7ff; }
+  }
+</style>
+</head>
+<body>
+<main class="game" id="game">
+  <section class="hud">
+    <div class="chip"><small>分数</small><span id="score">0</span></div>
+    <div class="chip"><small>清掉</small><span id="cleared">0</span></div>
+    <div class="chip"><small>连消</small><span id="combo">0</span></div>
+    <div class="chip"><small>用时</small><span id="time">0</span></div>
+  </section>
+
+  <section class="fridge-shell" id="fridge">
+    <div class="fridge-title">6x8 冰箱 · 同类相邻 3 个自动清</div>
+    <div class="grid" id="grid"></div>
+  </section>
+
+  <div class="status" id="status">拖动食物塞进冰箱。放不下会爆仓。</div>
+  <div class="pressure"><span id="pressure"></span></div>
+
+  <section class="belt" id="belt">
+    <div class="belt-title" id="beltTitle">传送带: 5 秒内塞进去</div>
+    <div class="pending" id="pending"></div>
+    <div class="timer"><span id="timer"></span></div>
+    <div id="currentFood"></div>
+  </section>
+
+  <div class="overlay" id="overlay">
+    <div class="card">
+      <h2 id="resultTitle">冰箱爆仓了</h2>
+      <p id="resultScore"></p>
+      <p id="resultNote"></p>
+      <button id="restart">再整理一次</button>
+    </div>
+  </div>
+</main>
+
+<script>
+'use strict';
+
+const COLS = 6;
+const ROWS = 8;
+const CELL = 45;
+const START_TURN_MS = 5000;
+const MIN_TURN_MS = 2700;
+const MAX_PENDING = 3;
+const MAX_PRESSURE = 100;
+
+const FOODS = [
+  { type: 'tea', name: '奶茶', short: '奶茶', w: 1, h: 1, color: '#d98b46' },
+  { type: 'leftover', name: '剩菜盒', short: '剩菜', w: 1, h: 1, color: '#5fbf73' },
+  { type: 'egg', name: '鸡蛋盒', short: '鸡蛋', w: 2, h: 1, color: '#f4c542' },
+  { type: 'pizza', name: '披萨盒', short: '披萨', w: 2, h: 1, color: '#f06f45' },
+  { type: 'pot', name: '汤锅', short: '汤锅', w: 2, h: 2, color: '#6c7ae0' },
+  { type: 'gift', name: '年货礼盒', short: '年货', w: 1, h: 2, color: '#db3a57' },
+  { type: 'fish', name: '冻鱼', short: '冻鱼', w: 3, h: 1, color: '#3aa7a3' },
+];
+
+const state = {
+  board: [],
+  items: new Map(),
+  nextId: 1,
+  current: null,
+  dragging: false,
+  dragOffsetX: 0,
+  dragOffsetY: 0,
+  hover: null,
+  score: 0,
+  cleared: 0,
+  combo: 0,
+  bestCombo: 0,
+  pending: 0,
+  pressure: 0,
+  elapsed: 0,
+  turnLeft: START_TURN_MS,
+  turnLimit: START_TURN_MS,
+  running: true,
+  lastTs: 0,
+};
+
+const el = {
+  grid: document.getElementById('grid'),
+  fridge: document.getElementById('fridge'),
+  currentFood: document.getElementById('currentFood'),
+  score: document.getElementById('score'),
+  cleared: document.getElementById('cleared'),
+  combo: document.getElementById('combo'),
+  time: document.getElementById('time'),
+  timer: document.getElementById('timer'),
+  beltTitle: document.getElementById('beltTitle'),
+  pending: document.getElementById('pending'),
+  pressure: document.getElementById('pressure'),
+  status: document.getElementById('status'),
+  overlay: document.getElementById('overlay'),
+  resultTitle: document.getElementById('resultTitle'),
+  resultScore: document.getElementById('resultScore'),
+  resultNote: document.getElementById('resultNote'),
+  restart: document.getElementById('restart'),
+};
+
+function initBoard() {
+  state.board = Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+}
+
+function createGrid() {
+  el.grid.innerHTML = '';
+  for (let i = 0; i < COLS * ROWS; i++) {
+    const cell = document.createElement('div');
+    cell.className = 'cell';
+    cell.dataset.index = String(i);
+    el.grid.appendChild(cell);
+  }
+}
+
+function createPendingDots() {
+  el.pending.innerHTML = '';
+  for (let i = 0; i < MAX_PENDING; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'pending-dot';
+    el.pending.appendChild(dot);
+  }
+}
+
+function randomFood() {
+  const pool = foodPool();
+  const type = pool[Math.floor(Math.random() * pool.length)];
+  return FOODS.find(f => f.type === type);
+}
+
+function difficultyLevel() {
+  return Math.min(5, Math.floor(state.elapsed / 20));
+}
+
+function lateDifficultyLevel() {
+  return Math.max(0, difficultyLevel() - 2);
+}
+
+function foodPool() {
+  const level = difficultyLevel();
+  if (level === 0) {
+    // 开局就给 5 个识别种类,但大件权重仍低,保证上手不乱。
+    return ['tea', 'tea', 'leftover', 'leftover', 'egg', 'pizza', 'gift'];
+  }
+  if (level === 1) {
+    // 20 秒后加入 2x2 汤锅,开始制造空间压力。
+    return ['tea', 'leftover', 'egg', 'egg', 'pizza', 'gift', 'pot'];
+  }
+  if (level === 2) {
+    // 40 秒后加入 3x1 冻鱼,横向空间开始紧张。
+    return ['tea', 'leftover', 'egg', 'pizza', 'gift', 'pot', 'fish'];
+  }
+  if (level === 3) {
+    // 60 秒后保持 7 种识别压力,但让大件开始成为主要压力来源。
+    return ['tea', 'leftover', 'egg', 'pizza', 'gift', 'gift', 'pot', 'pot', 'fish'];
+  }
+  if (level === 4) {
+    return ['tea', 'leftover', 'egg', 'pizza', 'gift', 'gift', 'pot', 'pot', 'pot', 'fish', 'fish'];
+  }
+  return ['tea', 'leftover', 'egg', 'pizza', 'gift', 'gift', 'pot', 'pot', 'pot', 'fish', 'fish', 'fish'];
+}
+
+function unlockedTypeCount() {
+  return new Set(foodPool()).size;
+}
+
+function currentTurnLimit() {
+  const late = lateDifficultyLevel();
+  return Math.max(MIN_TURN_MS, START_TURN_MS - difficultyLevel() * 460 - late * 150);
+}
+
+function missPressurePenalty() {
+  return 24 + difficultyLevel() * 7 + lateDifficultyLevel() * 6;
+}
+
+function noSpacePressureRate() {
+  return 0.012 + difficultyLevel() * 0.006 + lateDifficultyLevel() * 0.003;
+}
+
+function spawnFood() {
+  state.current = { ...randomFood(), id: 'current' };
+  state.turnLimit = currentTurnLimit();
+  state.turnLeft = state.turnLimit;
+  state.dragging = false;
+  state.hover = null;
+  renderCurrentFood();
+  const seconds = (state.turnLimit / 1000).toFixed(1).replace('.0', '');
+  setStatus('难度 ' + (difficultyLevel() + 1) + ' / ' + unlockedTypeCount() + ' 种: ' + state.current.name + ' 来了, ' + seconds + ' 秒内塞进去。');
+}
+
+function renderCurrentFood() {
+  el.currentFood.innerHTML = '';
+  if (!state.current || !state.running) return;
+  const food = document.createElement('div');
+  food.className = 'food';
+  food.id = 'dragFood';
+  food.style.width = (state.current.w * CELL) + 'px';
+  food.style.height = (state.current.h * CELL) + 'px';
+  food.style.left = '30px';
+  food.style.top = '40px';
+  food.style.background = state.current.color;
+  food.innerHTML = '<span class="food-label">' + state.current.short + '</span>';
+  food.addEventListener('pointerdown', startDrag);
+  el.currentFood.appendChild(food);
+}
+
+function startDrag(e) {
+  if (!state.running || !state.current) return;
+  e.preventDefault();
+  const foodEl = document.getElementById('dragFood');
+  const rect = foodEl.getBoundingClientRect();
+  state.dragging = true;
+  state.dragOffsetX = e.clientX - rect.left;
+  state.dragOffsetY = e.clientY - rect.top;
+  foodEl.style.position = 'fixed';
+  foodEl.style.zIndex = '30';
+  foodEl.classList.add('dragging');
+  foodEl.setPointerCapture(e.pointerId);
+  moveDrag(e);
+  foodEl.addEventListener('pointermove', moveDrag);
+  foodEl.addEventListener('pointerup', endDrag, { once: true });
+  foodEl.addEventListener('pointercancel', cancelDrag, { once: true });
+}
+
+function moveDrag(e) {
+  if (!state.dragging) return;
+  const foodEl = document.getElementById('dragFood');
+  foodEl.style.left = (e.clientX - state.dragOffsetX) + 'px';
+  foodEl.style.top = (e.clientY - state.dragOffsetY) + 'px';
+  const gridRect = el.grid.getBoundingClientRect();
+  const gx = Math.floor((e.clientX - gridRect.left - state.dragOffsetX + CELL / 2) / CELL);
+  const gy = Math.floor((e.clientY - gridRect.top - state.dragOffsetY + CELL / 2) / CELL);
+  state.hover = { x: gx, y: gy, ok: canPlace(gx, gy, state.current) };
+  renderPreview();
+}
+
+function endDrag(e) {
+  if (!state.dragging) return;
+  e.preventDefault();
+  const hover = state.hover;
+  state.dragging = false;
+  clearPreview();
+  if (hover && hover.ok) {
+    placeCurrent(hover.x, hover.y);
+  } else {
+    setStatus('这里塞不下。换个位置。', true);
+    renderCurrentFood();
+  }
+}
+
+function cancelDrag() {
+  state.dragging = false;
+  state.hover = null;
+  clearPreview();
+  renderCurrentFood();
+}
+
+function canPlace(x, y, food) {
+  if (!food) return false;
+  if (x < 0 || y < 0 || x + food.w > COLS || y + food.h > ROWS) return false;
+  for (let yy = y; yy < y + food.h; yy++) {
+    for (let xx = x; xx < x + food.w; xx++) {
+      if (state.board[yy][xx]) return false;
+    }
+  }
+  return true;
+}
+
+function hasAnyPlace(food) {
+  for (let y = 0; y <= ROWS - food.h; y++) {
+    for (let x = 0; x <= COLS - food.w; x++) {
+      if (canPlace(x, y, food)) return true;
+    }
+  }
+  return false;
+}
+
+function placeCurrent(x, y) {
+  const food = state.current;
+  const id = state.nextId++;
+  const item = { id, type: food.type, name: food.name, short: food.short, w: food.w, h: food.h, x, y, color: food.color };
+  state.items.set(id, item);
+  for (let yy = y; yy < y + food.h; yy++) {
+    for (let xx = x; xx < x + food.w; xx++) state.board[yy][xx] = id;
+  }
+  state.score += 8 + food.w * food.h * 2;
+  state.current = null;
+  state.pressure = Math.max(0, state.pressure - Math.max(4, 10 - difficultyLevel()));
+  renderBoard();
+  const cleared = resolveClears();
+  if (!cleared) {
+    state.combo = 0;
+    setStatus('塞进去了。继续留空间。');
+  }
+  spawnFood();
+}
+
+function resolveClears() {
+  let any = false;
+  let chain = 0;
+  while (true) {
+    const groups = findClearGroups();
+    if (!groups.length) break;
+    any = true;
+    chain++;
+    const ids = new Set(groups.flat());
+    markClearing(ids);
+    for (const id of ids) removeItem(id);
+    const gain = ids.size * 35 * chain;
+    state.score += gain;
+    state.cleared += ids.size;
+    state.pressure = Math.max(0, state.pressure - ids.size * (6 + chain * 2));
+    state.combo = chain;
+    state.bestCombo = Math.max(state.bestCombo, chain);
+    renderBoard();
+    flashClearedCells();
+  }
+  if (any) setStatus('清掉一组! 空间回来了。连消 x' + chain);
+  return any;
+}
+
+function findClearGroups() {
+  const byType = new Map();
+  for (const item of state.items.values()) {
+    if (!byType.has(item.type)) byType.set(item.type, []);
+    byType.get(item.type).push(item);
+  }
+  const result = [];
+  for (const items of byType.values()) {
+    const graph = new Map(items.map(item => [item.id, []]));
+    for (let i = 0; i < items.length; i++) {
+      for (let j = i + 1; j < items.length; j++) {
+        if (itemsTouch(items[i], items[j])) {
+          graph.get(items[i].id).push(items[j].id);
+          graph.get(items[j].id).push(items[i].id);
+        }
+      }
+    }
+    const seen = new Set();
+    for (const item of items) {
+      if (seen.has(item.id)) continue;
+      const stack = [item.id];
+      const comp = [];
+      seen.add(item.id);
+      while (stack.length) {
+        const id = stack.pop();
+        comp.push(id);
+        for (const next of graph.get(id)) {
+          if (!seen.has(next)) {
+            seen.add(next);
+            stack.push(next);
+          }
+        }
+      }
+      if (comp.length >= 3) result.push(comp);
+    }
+  }
+  return result;
+}
+
+function itemCells(item) {
+  const cells = [];
+  for (let y = item.y; y < item.y + item.h; y++) {
+    for (let x = item.x; x < item.x + item.w; x++) cells.push({ x, y });
+  }
+  return cells;
+}
+
+function itemsTouch(a, b) {
+  const ac = itemCells(a);
+  const bc = itemCells(b);
+  for (const ca of ac) {
+    for (const cb of bc) {
+      const d = Math.abs(ca.x - cb.x) + Math.abs(ca.y - cb.y);
+      if (d === 1) return true;
+    }
+  }
+  return false;
+}
+
+function removeItem(id) {
+  const item = state.items.get(id);
+  if (!item) return;
+  for (let y = item.y; y < item.y + item.h; y++) {
+    for (let x = item.x; x < item.x + item.w; x++) {
+      if (state.board[y][x] === id) state.board[y][x] = null;
+    }
+  }
+  state.items.delete(id);
+}
+
+function missCurrent() {
+  if (!state.current || !state.running) return;
+  state.pending++;
+  state.pressure += missPressurePenalty();
+  setStatus(state.current.name + ' 进待处理区了。再堆就爆。', true);
+  state.current = null;
+  state.combo = 0;
+  if (state.pending >= MAX_PENDING) return gameOver('待处理区满了');
+  spawnFood();
+}
+
+function update(dt) {
+  if (!state.running) return;
+  state.elapsed += dt / 1000;
+  state.turnLeft -= dt;
+  if (state.current && !hasAnyPlace(state.current)) {
+    state.pressure += dt * noSpacePressureRate();
+  } else {
+    state.pressure = Math.max(0, state.pressure - dt * Math.max(0.0015, 0.004 - difficultyLevel() * 0.00035 - lateDifficultyLevel() * 0.00025));
+  }
+  if (state.turnLeft <= 0) missCurrent();
+  if (state.pressure >= MAX_PRESSURE) gameOver('冰箱门压力爆表');
+}
+
+function renderBoard() {
+  el.grid.querySelectorAll('.placed').forEach(node => node.remove());
+  for (const item of state.items.values()) {
+    const node = document.createElement('div');
+    node.className = 'placed';
+    node.style.left = (item.x * CELL) + 'px';
+    node.style.top = (item.y * CELL) + 'px';
+    node.style.width = (item.w * CELL) + 'px';
+    node.style.height = (item.h * CELL) + 'px';
+    node.style.background = item.color;
+    node.textContent = item.short;
+    el.grid.appendChild(node);
+  }
+}
+
+function renderPreview() {
+  clearPreview();
+  if (!state.hover || !state.current) return;
+  const cls = state.hover.ok ? 'preview-ok' : 'preview-bad';
+  for (let y = state.hover.y; y < state.hover.y + state.current.h; y++) {
+    for (let x = state.hover.x; x < state.hover.x + state.current.w; x++) {
+      if (x >= 0 && y >= 0 && x < COLS && y < ROWS) cellAt(x, y).classList.add(cls);
+    }
+  }
+}
+
+function clearPreview() {
+  el.grid.querySelectorAll('.preview-ok,.preview-bad').forEach(cell => {
+    cell.classList.remove('preview-ok', 'preview-bad');
+  });
+}
+
+function cellAt(x, y) {
+  return el.grid.children[y * COLS + x];
+}
+
+function markClearing(ids) {
+  for (const id of ids) {
+    const item = state.items.get(id);
+    if (!item) continue;
+    for (let y = item.y; y < item.y + item.h; y++) {
+      for (let x = item.x; x < item.x + item.w; x++) cellAt(x, y).classList.add('clearing');
+    }
+  }
+}
+
+function flashClearedCells() {
+  setTimeout(() => {
+    el.grid.querySelectorAll('.clearing').forEach(cell => cell.classList.remove('clearing'));
+  }, 420);
+}
+
+function updateHud() {
+  el.score.textContent = Math.floor(state.score);
+  el.cleared.textContent = state.cleared;
+  el.combo.textContent = state.combo;
+  el.time.textContent = Math.floor(state.elapsed);
+  const timerPct = Math.max(0, state.turnLeft / state.turnLimit) * 100;
+  el.timer.style.width = timerPct + '%';
+  el.timer.style.background = timerPct < 28 ? '#ff6b6b' : timerPct < 55 ? '#ffd166' : '#78e08f';
+  el.pressure.style.width = Math.min(100, state.pressure) + '%';
+  el.fridge.classList.toggle('danger', state.pressure > 70 || state.pending >= 2);
+  [...el.pending.children].forEach((dot, idx) => dot.classList.toggle('full', idx < state.pending));
+  el.beltTitle.textContent = '传送带: ' + (state.turnLimit / 1000).toFixed(1).replace('.0', '') + ' 秒 · 难度 ' + (difficultyLevel() + 1) + ' · ' + unlockedTypeCount() + ' 种';
+}
+
+function setStatus(text, hot) {
+  el.status.textContent = text;
+  el.status.classList.toggle('hot', !!hot);
+}
+
+function gameOver(reason) {
+  if (!state.running) return;
+  state.running = false;
+  el.overlay.classList.add('show');
+  const index = Math.max(1, Math.min(99, Math.round(45 + state.score / 12 - state.pending * 10 - state.pressure / 5)));
+  el.resultTitle.textContent = '冰箱爆仓了';
+  el.resultScore.textContent = '冰箱管理指数: ' + index + '% · 清掉 ' + state.cleared + ' 份';
+  const notes = [
+    reason + ': 你的冰箱门被年货顶开了。',
+    reason + ': 汤锅和披萨盒达成了堵门联盟。',
+    reason + ': 奶茶找到了,但是冰箱没地方了。',
+    reason + ': 本次死因是没有给大件留位置。'
+  ];
+  el.resultNote.textContent = notes[Math.floor(Math.random() * notes.length)];
+}
+
+function reset() {
+  initBoard();
+  state.items.clear();
+  state.nextId = 1;
+  state.current = null;
+  state.dragging = false;
+  state.hover = null;
+  state.score = 0;
+  state.cleared = 0;
+  state.combo = 0;
+  state.bestCombo = 0;
+  state.pending = 0;
+  state.pressure = 0;
+  state.elapsed = 0;
+  state.turnLeft = START_TURN_MS;
+  state.turnLimit = START_TURN_MS;
+  state.running = true;
+  state.lastTs = performance.now();
+  el.overlay.classList.remove('show');
+  clearPreview();
+  renderBoard();
+  spawnFood();
+  updateHud();
+}
+
+function loop(ts) {
+  const dt = Math.min(ts - state.lastTs, 50);
+  state.lastTs = ts;
+  update(dt);
+  updateHud();
+  requestAnimationFrame(loop);
+}
+
+createGrid();
+createPendingDots();
+el.restart.addEventListener('click', reset);
+reset();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

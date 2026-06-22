@@ -1,0 +1,10 @@
+{
+  "name": "h5game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:fridge-overflow": "node scripts/build-fridge-overflow-bundle.mjs",
+    "test": "node --test"
+  }
+}

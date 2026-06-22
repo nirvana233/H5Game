@@ -1,0 +1,72 @@
+# Auto-generated sprint status. Update through sprint/story workflows when continuing production.
+sprint: 1
+goal: "Deliver playable Fridge Overflow MVP"
+start: "2026-06-22"
+end: "2026-06-28"
+generated: "2026-06-22"
+updated: "2026-06-22"
+
+stories:
+  - id: "foundation-runtime-001"
+    name: "Board And Food Data Foundation"
+    file: "production/epics/foundation-runtime/story-001-board-and-food-data.md"
+    priority: must-have
+    status: done
+    owner: "lead-programmer"
+    estimate_days: 1
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "foundation-runtime-002"
+    name: "Optional Best-Score Storage"
+    file: "production/epics/foundation-runtime/story-002-optional-storage.md"
+    priority: must-have
+    status: done
+    owner: "lead-programmer"
+    estimate_days: 0.5
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "core-loop-001"
+    name: "Difficulty And Spawn Schedule"
+    file: "production/epics/core-loop/story-001-difficulty-spawn-schedule.md"
+    priority: must-have
+    status: done
+    owner: "gameplay-programmer"
+    estimate_days: 1
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "core-loop-002"
+    name: "Clear Pressure Score Resolution"
+    file: "production/epics/core-loop/story-002-clear-pressure-score.md"
+    priority: must-have
+    status: done
+    owner: "gameplay-programmer"
+    estimate_days: 1.5
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "core-loop-003"
+    name: "Pointer Drag And Session Flow"
+    file: "production/epics/core-loop/story-003-pointer-session-flow.md"
+    priority: must-have
+    status: done
+    owner: "gameplay-programmer"
+    estimate_days: 1
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "presentation-hud-001"
+    name: "HUD And Result UI"
+    file: "production/epics/presentation-hud/story-001-hud-result-ui.md"
+    priority: must-have
+    status: done
+    owner: "ui-programmer"
+    estimate_days: 1
+    blocker: ""
+    completed: "2026-06-22"
+  - id: "presentation-hud-002"
+    name: "Accessible Feedback"
+    file: "production/epics/presentation-hud/story-002-accessible-feedback.md"
+    priority: must-have
+    status: done
+    owner: "ui-programmer"
+    estimate_days: 0.5
+    blocker: ""
+    completed: "2026-06-22"
