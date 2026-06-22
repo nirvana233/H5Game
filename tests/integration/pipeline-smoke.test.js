@@ -19,7 +19,7 @@ function assertMeaningfulFile(path) {
 test('technical setup gate artifacts are present', () => {
   for (const path of [
     'AGENTS.md',
-    '.Codex/docs/technical-preferences.md',
+    '.codex/docs/technical-preferences.md',
     'docs/engine-reference/web-platform/VERSION.md',
     'docs/architecture/architecture.md',
     'docs/architecture/requirements-traceability.md',
@@ -46,8 +46,9 @@ test('CI and package scripts run the Node smoke suite', () => {
 
   const workflow = read('.github/workflows/tests.yml');
   assert.match(workflow, /npm test/);
-  assert.match(workflow, /actions\/checkout@v4/);
-  assert.match(workflow, /actions\/setup-node@v4/);
+  assert.match(workflow, /actions\/checkout@v5/);
+  assert.match(workflow, /actions\/setup-node@v5/);
+  assert.match(workflow, /node-version: '24'/);
 });
 
 test('phase state advances only after PASS gate reports exist', () => {

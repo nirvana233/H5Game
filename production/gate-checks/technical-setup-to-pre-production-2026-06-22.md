@@ -7,7 +7,7 @@
 ## Required Artifacts: 13/13 present
 
 - [x] Engine chosen: `AGENTS.md` sets Web Platform / HTML5 Browser Runtime.
-- [x] Technical preferences configured: `.Codex/docs/technical-preferences.md`.
+- [x] Technical preferences configured: `.codex/docs/technical-preferences.md`.
 - [x] Art bible sections 1-4 present: `design/art/art-bible.md`.
 - [x] At least 3 foundation ADRs present: ADR-0001 through ADR-0005 are Accepted.
 - [x] Engine reference docs present: `docs/engine-reference/web-platform/`.
