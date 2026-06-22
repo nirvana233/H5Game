@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>色相位移 · Hue Shift</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-user-select:none; user-select:none; }
+  :root{ --ink:#2b1c3a; --pink:#ff4d88; --cyan:#13cfcf; --gold:#ffcf3f; }
+  html,body{
+    height:100%;
+    font-family:-apple-system,"PingFang SC","Microsoft YaHei",ui-rounded,"Segoe UI",sans-serif;
+    background:radial-gradient(120% 120% at 50% 0%, #3a2b5e 0%, #211538 60%, #150d27 100%);
+    color:#fff; overflow:hidden;
+    display:flex; flex-direction:column; align-items:center; justify-content:flex-start;
+  }
+  #wrap{ width:100%; max-width:960px; margin:0 auto; display:flex; flex-direction:column; align-items:center; gap:7px; padding:8px 8px 0; }
+  #hud{ width:100%; display:flex; align-items:center; gap:6px; font-weight:800; }
+  .chip{ background:rgba(255,255,255,.10); border:2px solid rgba(255,255,255,.18); border-radius:11px; padding:6px 11px; font-size:13px; display:flex; align-items:center; gap:6px; backdrop-filter:blur(4px); }
+  .chip small{ opacity:.65; font-size:10px; }
+  .chip b{ font-size:16px; }
+  .spacer{ flex:1; }
+  .icon-btn{ background:rgba(255,255,255,.10); border:2px solid rgba(255,255,255,.18); border-radius:11px; color:#fff; width:36px; height:36px; font-size:16px; cursor:pointer; }
+  .icon-btn:active{ transform:translateY(2px); }
+  #cv{ background:#1b1030; border-radius:14px; box-shadow:0 10px 0 rgba(0,0,0,.25), 0 18px 40px rgba(0,0,0,.45); display:block; touch-action:none; }
+  /* 触屏 */
+  #touch{ width:100%; max-width:960px; display:flex; align-items:flex-end; justify-content:space-between; padding:12px 16px 20px; gap:10px; touch-action:none; }
+  .pad{ display:flex; gap:14px; align-items:flex-end; }
+  .tbtn{ width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,.12); border:2px solid rgba(255,255,255,.25); color:#fff; font-size:26px; font-weight:800; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 0 rgba(0,0,0,.3); touch-action:none; }
+  .tbtn.active{ transform:translateY(3px); box-shadow:none; filter:brightness(1.3); }
+  #btnSwap{ width:84px; height:84px; font-size:15px; line-height:1.1; text-align:center; font-weight:900;
+    background:conic-gradient(from 200deg, var(--pink), var(--cyan), var(--pink)); border:3px solid #fff; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6); box-shadow:0 5px 0 rgba(0,0,0,.35); }
+  @media (hover:hover) and (pointer:fine){ #touch{ display:none; } }
+  /* 弹窗 */
+  .overlay{ position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background:rgba(15,8,30,.74); backdrop-filter:blur(5px); padding:20px; }
+  .overlay.hidden{ display:none; }
+  .card{ background:linear-gradient(180deg,#3a2860,#251544); border:3px solid rgba(255,255,255,.2); border-radius:20px; padding:26px 22px; max-width:392px; width:100%; text-align:center; box-shadow:0 18px 50px rgba(0,0,0,.6); }
+  .card .big{ font-size:46px; line-height:1; margin-bottom:6px; }
+  .card h1{ font-size:24px; margin-bottom:10px; letter-spacing:1px;
+    background:linear-gradient(90deg,var(--pink),var(--cyan)); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
+  .card p{ font-size:13.5px; line-height:1.75; color:#d9cfea; margin-bottom:14px; }
+  .legend{ background:rgba(0,0,0,.22); border:2px solid rgba(255,255,255,.12); border-radius:13px; padding:13px 14px; text-align:left; font-size:12.5px; line-height:1.85; color:#e6def4; margin-bottom:16px; }
+  .legend b{ color:var(--gold); }
+  .kpink{ color:var(--pink); font-weight:800; } .kcyan{ color:var(--cyan); font-weight:800; }
+  .btn{ display:block; width:100%; border:none; border-radius:14px; padding:14px; font-size:16px; font-weight:800; cursor:pointer; margin-top:10px; color:#2b1430; font-family:inherit; letter-spacing:1px;
+    background:linear-gradient(180deg,#ffe27a,#ffc23c); box-shadow:0 5px 0 #c98a14; }
+  .btn:active{ transform:translateY(3px); box-shadow:0 2px 0 #c98a14; }
+  .btn.alt{ background:linear-gradient(90deg,var(--pink),var(--cyan)); color:#fff; box-shadow:0 5px 0 rgba(0,0,0,.35); text-shadow:0 1px 2px rgba(0,0,0,.4); }
+  .tag{ display:inline-block; background:rgba(0,0,0,.25); border:2px solid rgba(255,255,255,.18); color:var(--gold); font-weight:800; border-radius:9px; padding:4px 11px; font-size:12px; margin-bottom:10px; }
+  .stat{ display:flex; justify-content:space-around; margin:8px 0 14px; }
+  .stat div{ font-size:13px; color:#d9cfea; } .stat b{ display:block; font-size:24px; color:var(--gold); }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <div id="hud">
+      <div class="chip"><small>关卡</small><span id="lvNum">1</span><small>/<span id="lvTot">5</span></small></div>
+      <div class="chip" id="colorChip"><small>当前色</small><b id="colorName">粉</b></div>
+      <div class="chip" style="color:var(--gold)"><small style="color:var(--gold)">★</small><span id="gemNum">0</span></div>
+      <div class="spacer"></div>
+      <button class="icon-btn" id="helpBtn">?</button>
+      <button class="icon-btn" id="muteBtn">🔊</button>
+      <button class="icon-btn" id="restartBtn">↺</button>
+    </div>
+    <canvas id="cv" width="768" height="480"></canvas>
+  </div>
+
+  <div id="touch">
+    <div class="pad">
+      <div class="tbtn" id="btnLeft">◀</div>
+      <div class="tbtn" id="btnRight">▶</div>
+    </div>
+    <div class="pad">
+      <div class="tbtn" id="btnSwap">变色<br>SWAP</div>
+      <div class="tbtn" id="btnJump">⤒</div>
+    </div>
+  </div>
+
+  <div class="overlay" id="startOverlay">
+    <div class="card">
+      <div class="big">🟣🔵</div>
+      <h1>色相位移</h1>
+      <p>你就是一种颜色——<br>只有<span class="kpink">和你同色</span>的平台才托得住你。</p>
+      <div class="legend">
+        <div>🟪 <span class="kpink">粉色平台</span>：你是粉色时 = 实心；蓝色时 = 虚影，会穿过去</div>
+        <div>🟦 <span class="kcyan">蓝色平台</span>：反过来</div>
+        <div>⬜ 米黄平台：永远实心，安全立足点</div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,.12);margin:7px 0">
+        <div>💡 <b>半空切色</b>，让脚下的路瞬间出现 → 这就是全部乐趣</div>
+        <div>⚠️ 灰刺永远扎人；掉出画面会重来</div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,.12);margin:7px 0">
+        <div>PC：<b>← →</b> 移动 · <b>空格/↑</b> 跳 · <b>Shift/J</b> 变色</div>
+        <div>手机：左下方向 · 右下 <b>跳</b> / <b>变色</b></div>
+      </div>
+      <button class="btn" id="startBtn">开始变色</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="helpOverlay">
+    <div class="card">
+      <h1 style="margin-bottom:12px">玩法说明</h1>
+      <div class="legend">
+        <div>核心只有一招：<b>变色</b>。</div>
+        <div>🟪 粉 / 🟦 蓝 平台只有在<b>同色</b>时实心，异色时是可穿过的虚影。</div>
+        <div>看到前方虚影平台 = 提示你「该变色了」。</div>
+        <div>最爽的玩法：<b>起跳 → 半空变色 → 精准落在刚刚出现的平台上</b>。</div>
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,.12);margin:7px 0">
+        <div>⬜ 米黄永远实心 · ⚠️ 灰刺永远扎 · ★ 收集星星冲高分</div>
+        <div>PC：<b>← →</b>·<b>空格</b>跳·<b>Shift/J</b>变色　手机：屏下按钮</div>
+      </div>
+      <button class="btn" id="helpCloseBtn">明白了</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="clearOverlay">
+    <div class="card">
+      <div class="big">✨</div>
+      <span class="tag" id="clearTag">关卡 1 完成</span>
+      <h1>过关！</h1>
+      <p id="clearMsg">下一关，色彩更刁钻。</p>
+      <button class="btn alt" id="nextBtn">下一关 →</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="deadOverlay">
+    <div class="card">
+      <div class="big">💫</div>
+      <h1 style="-webkit-text-fill-color:#ff7aa6;background:none">差一点！</h1>
+      <p id="deadMsg">再试一次，掐准变色的那一下。</p>
+      <button class="btn" id="retryBtn">重试本关</button>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="winOverlay">
+    <div class="card">
+      <div class="big">🏆</div>
+      <h1>全部通关！</h1>
+      <div class="stat">
+        <div>用时<b id="winTime">0s</b></div>
+        <div>星星<b id="winGem">0</b></div>
+        <div>变色<b id="winSwap">0</b></div>
+      </div>
+      <p id="winBest"></p>
+      <button class="btn" id="shareBtn">📋 复制成绩晒一晒</button>
+      <button class="btn alt" id="againBtn">再玩一次</button>
+    </div>
+  </div>
+
+<script>
+"use strict";
+(function(){
+//================== 配置 ==================
+const TILE=32, VIEW_W=768, VIEW_H=480, ROWS=15, GROUND=13*TILE;
+const GRAV=0.62, MAXFALL=15, MOVE=3.5, JUMP=11.3, COYOTE=6, JBUF=7;
+
+const COLORS={
+  pink:{ name:'粉', main:'#ff3f80', lite:'#ff77a8', deep:'#cc2b63', ghost:'rgba(255,63,128,.85)' },
+  cyan:{ name:'蓝', main:'#11cccc', lite:'#6df0f0', deep:'#0a9a9a', ghost:'rgba(17,204,204,.85)' },
+};
+const NEUTRAL={ main:'#ffce5e', lite:'#ffe6a8', deep:'#d49a2e' };
+
+//================== 关卡 ==================
+// 操作: ['g',c0,c1]地面 ['p',色,c0,c1,r]平台 ['s',c0,c1]刺 ['m',c,r]星 ['S',c]出生 ['G',c]终点
+const LEVELS=[
+  // L1 教学：地面休息点 + 交替色台阶(落坑即重来,鼓励掐准变色)
+  { w:54, ops:[
+    ['g',0,8],['S',2],
+    ['p','pink',10,12,11],['m','star',11,9],
+    ['p','cyan',15,17,11],['m','star',16,9],
+    ['p','pink',20,22,11],
+    ['g',25,33],
+    ['p','cyan',36,38,11],['p','pink',41,43,11],['m','star',42,9],
+    ['g',46,54],['G',50],
+  ]},
+  // L2 高度起伏 + 深坑
+  { w:64, ops:[
+    ['g',0,7],['S',2],
+    ['p','pink',10,11,11],['p','cyan',14,15,10],['p','pink',18,19,11],['m','star',18,9],
+    ['p','cyan',22,23,10],['g',26,33],
+    ['p','pink',36,37,11],['p','cyan',40,41,10],['p','pink',44,45,11],['m','star',44,9],
+    ['g',48,56],['p','cyan',59,60,11],['g',62,64],['G',63],
+  ]},
+  // L3 连续切色
+  { w:72, ops:[
+    ['g',0,6],['S',2],
+    ['p','pink',9,10,11],['p','cyan',13,14,11],['p','pink',17,18,11],['p','cyan',21,22,11],['m','star',21,9],
+    ['p','pink',25,26,10],['g',29,36],
+    ['p','cyan',39,40,11],['p','pink',43,44,10],['p','cyan',47,48,11],['m','star',47,9],
+    ['p','pink',51,52,11],['g',55,63],
+    ['p','cyan',66,67,11],['g',69,72],['G',70],
+  ]},
+  // L4 心流长廊(连续等高台阶,快速变色)
+  { w:84, ops:[
+    ['g',0,5],['S',2],
+    ['p','pink',8,9,11],['p','cyan',12,13,11],['p','pink',16,17,11],['p','cyan',20,21,11],
+    ['p','pink',24,25,11],['m','star',24,9],['p','cyan',28,29,11],['g',32,39],
+    ['p','pink',42,43,11],['p','cyan',46,47,10],['p','pink',50,51,11],['p','cyan',54,55,10],['m','star',54,8],
+    ['p','pink',58,59,11],['g',62,70],
+    ['p','cyan',73,74,11],['p','pink',77,78,11],['g',80,84],['G',82],
+  ]},
+  // L5 终关:综合
+  { w:90, ops:[
+    ['g',0,5],['S',2],
+    ['p','cyan',8,9,11],['p','pink',12,13,10],['p','cyan',16,17,11],['m','star',16,9],
+    ['p','pink',20,21,10],['p','cyan',24,25,11],['g',28,35],
+    ['p','pink',38,39,11],['p','cyan',42,43,10],['p','pink',46,47,11],['m','star',46,9],
+    ['p','cyan',50,51,10],['g',54,61],
+    ['p','pink',64,65,11],['p','cyan',68,69,10],['p','pink',72,73,11],['m','star',72,9],
+    ['p','cyan',76,77,11],['g',80,90],['G',85],['m','star',83,11],
+  ]},
+];
+const TOTAL=LEVELS.length;
+
+//================== 运行时 ==================
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+let level=null, lvIndex=0, camX=0, player=null, parts=[], shake=0, flash=0, flashCol=null;
+let gems=0, gemsAtStart=0, swaps=0, elapsed=0, state='start', tick=0;
+const input={left:false,right:false,jumpHeld:false,jumpPressed:false};
+
+function buildLevel(spec){
+  const W=spec.w, g=[]; for(let r=0;r<ROWS;r++) g.push(new Array(W).fill('.'));
+  const set=(c,r,ch)=>{ if(r>=0&&r<ROWS&&c>=0&&c<W) g[r][c]=ch; };
+  let start={c:2}, goal={c:W-3};
+  for(const op of spec.ops){
+    const k=op[0];
+    if(k==='g'){ for(let c=op[1];c<=op[2];c++){ set(c,13,'#'); set(c,14,'#'); } }
+    else if(k==='p'){ const ch=op[1]==='#'?'#':(op[1]==='pink'?'P':'C'); for(let c=op[2];c<=op[3];c++) set(c,op[4],ch); }
+    else if(k==='s'){ for(let c=op[1];c<=op[2];c++) set(c,12,'^'); }
+    else if(k==='m'){ set(op[1],op[2],'*'); }
+    else if(k==='S'){ start={c:op[1]}; }
+    else if(k==='G'){ goal={c:op[1]}; }
+  }
+  return { w:W, cells:g, start, goal };
+}
+function loadLevel(i){
+  lvIndex=i; level=buildLevel(LEVELS[i]); gemsAtStart=gems; parts=[]; shake=0; flash=0;
+  player={ x:level.start.c*TILE, y:GROUND-30, w:24, h:28, vx:0, vy:0, color:'pink', face:1,
+           onGround:false, coyote:0, jumpBuf:0, prevY:0, dead:false, squash:0 };
+  camX=0; updateHUD();
+}
+
+//================== 碰撞 ==================
+function cellAt(c,r){ if(r<0||r>=ROWS) return '.'; if(c<0||c>=level.w) return '#'; return level.cells[r][c]; }
+function solidCell(ch){ if(ch==='#') return true; if(ch==='P') return player.color==='pink'; if(ch==='C') return player.color==='cyan'; return false; }
+function isSolid(c,r){ return solidCell(cellAt(c,r)); }
+function overlapSolid(x,y,w,h){
+  const c0=Math.floor(x/TILE),c1=Math.floor((x+w-1)/TILE),r0=Math.floor(y/TILE),r1=Math.floor((y+h-1)/TILE);
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++) if(isSolid(c,r)) return true; return false;
+}
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function moveX(dx){
+  player.x+=dx;
+  const c0=Math.floor(player.x/TILE),c1=Math.floor((player.x+player.w-1)/TILE),r0=Math.floor(player.y/TILE),r1=Math.floor((player.y+player.h-1)/TILE);
+  let hitL=-1,hitR=1e9;
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){ if(!isSolid(c,r))continue; if(dx>0)hitR=Math.min(hitR,c); else if(dx<0)hitL=Math.max(hitL,c); }
+  if(dx>0&&hitR!==1e9){ player.x=hitR*TILE-player.w; player.vx=0; }
+  else if(dx<0&&hitL!==-1){ player.x=(hitL+1)*TILE; player.vx=0; }
+}
+function moveY(dy){
+  player.y+=dy; player.onGround=false;
+  const c0=Math.floor(player.x/TILE),c1=Math.floor((player.x+player.w-1)/TILE),r0=Math.floor(player.y/TILE),r1=Math.floor((player.y+player.h-1)/TILE);
+  let hitT=-1,hitB=1e9;
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++){ if(!isSolid(c,r))continue; if(dy>0)hitB=Math.min(hitB,r); else if(dy<0)hitT=Math.max(hitT,r); }
+  if(dy>0&&hitB!==1e9){ player.y=hitB*TILE-player.h; if(player.vy>7) player.squash=1; player.vy=0; player.onGround=true; }
+  else if(dy<0&&hitT!==-1){ player.y=(hitT+1)*TILE; player.vy=0; }
+}
+
+//================== 变色 ==================
+function swapColor(){
+  if(state!=='play') return;
+  player.color = player.color==='pink'?'cyan':'pink';
+  swaps++;
+  // 若新色让平台出现而卡住身体，向上顶出
+  let guard=0; while(overlapSolid(player.x,player.y,player.w,player.h)&&guard<26){ player.y-=2; guard++; }
+  flash=10; flashCol=COLORS[player.color].main; shake=Math.min(shake+4,8);
+  const cx=player.x+player.w/2, cy=player.y+player.h/2, col=COLORS[player.color].lite;
+  for(let i=0;i<16;i++){ const a=(i/16)*Math.PI*2; parts.push({x:cx,y:cy,vx:Math.cos(a)*3.2,vy:Math.sin(a)*3.2,life:24,max:24,col,r:3}); }
+  player.squash=-1;
+  sfx('swap'); updateHUD();
+}
+
+//================== 更新 ==================
+function update(){
+  player.prevY=player.y;
+  let mv=0; if(input.left)mv-=1; if(input.right)mv+=1;
+  player.vx=mv*MOVE; if(mv!==0)player.face=mv;
+  player.coyote=player.onGround?COYOTE:Math.max(0,player.coyote-1);
+  if(input.jumpPressed)player.jumpBuf=JBUF; else player.jumpBuf=Math.max(0,player.jumpBuf-1);
+  if(player.jumpBuf>0&&player.coyote>0){ player.vy=-JUMP; player.onGround=false; player.coyote=0; player.jumpBuf=0; player.squash=-1; sfx('jump');
+    for(let i=0;i<6;i++)parts.push({x:player.x+player.w/2,y:player.y+player.h,vx:(Math.random()-.5)*2,vy:Math.random()*1.5,life:16,max:16,col:'#ffffff',r:2}); }
+  if(!input.jumpHeld&&player.vy<0)player.vy*=0.55;
+  player.vy=Math.min(player.vy+GRAV,MAXFALL);
+  moveX(player.vx); moveY(player.vy);
+
+  if(player.y>ROWS*TILE+50){ die(); return; }
+  collect(); spikes();
+  camX=clamp(player.x+player.w/2-VIEW_W/2,0,level.w*TILE-VIEW_W);
+  if(player.squash>0)player.squash=Math.max(0,player.squash-0.12);
+  if(player.squash<0)player.squash=Math.min(0,player.squash+0.12);
+  updateParts();
+  if(checkGoal())return;
+  input.jumpPressed=false;
+}
+function collect(){
+  const c0=Math.floor(player.x/TILE),c1=Math.floor((player.x+player.w-1)/TILE),r0=Math.floor(player.y/TILE),r1=Math.floor((player.y+player.h-1)/TILE);
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++) if(cellAt(c,r)==='*'){ level.cells[r][c]='.'; gems++; sfx('gem'); updateHUD();
+    for(let i=0;i<10;i++){ const a=Math.random()*Math.PI*2; parts.push({x:c*TILE+16,y:r*TILE+16,vx:Math.cos(a)*2.5,vy:Math.sin(a)*2.5-1,life:22,max:22,col:'#ffd84a',r:2.5}); } }
+}
+function spikes(){
+  const c0=Math.floor(player.x/TILE),c1=Math.floor((player.x+player.w-1)/TILE),r0=Math.floor(player.y/TILE),r1=Math.floor((player.y+player.h-1)/TILE);
+  for(let r=r0;r<=r1;r++)for(let c=c0;c<=c1;c++) if(cellAt(c,r)==='^'){ die(); return; }
+}
+function die(){
+  if(state!=='play')return; state='dead'; player.dead=true; shake=12; sfx('dead');
+  const cx=player.x+player.w/2, cy=player.y+player.h/2, col=COLORS[player.color].main;
+  for(let i=0;i<20;i++){ const a=Math.random()*Math.PI*2,s=Math.random()*4+1; parts.push({x:cx,y:cy,vx:Math.cos(a)*s,vy:Math.sin(a)*s-2,life:34,max:34,col,r:3}); }
+  setTimeout(()=>showOverlay('deadOverlay'),520);
+}
+function checkGoal(){
+  const gx=level.goal.c*TILE;
+  if(player.x+player.w>gx+4&&player.x<gx+TILE-4&&Math.abs((player.y+player.h)-GROUND)<TILE*4){
+    if(player.x+player.w>gx&&player.x<gx+TILE){
+      if(lvIndex>=TOTAL-1){ win(); }
+      else { state='clear'; sfx('clear'); document.getElementById('clearTag').textContent=`关卡 ${lvIndex+1} 完成`; showOverlay('clearOverlay'); }
+      return true;
+    }
+  }
+  return false;
+}
+function updateParts(){ for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.x+=p.vx; p.y+=p.vy; p.vy+=0.12; p.life--; if(p.life<=0)parts.splice(i,1); } if(shake>0)shake*=0.86; if(flash>0)flash--; }
+
+//================== 渲染 ==================
+function render(){
+  tick++;
+  ctx.save();
+  let sx=0,sy=0; if(shake>0.4){ sx=(Math.random()-.5)*shake; sy=(Math.random()-.5)*shake; }
+  ctx.translate(sx,sy);
+  drawSky();
+  ctx.save(); ctx.translate(-Math.round(camX),0);
+  drawGoal(); drawTiles(); drawGems(); drawPlayer(); drawParts();
+  ctx.restore();
+  drawTint();
+  if(flash>0){ ctx.globalAlpha=flash/10*0.32; ctx.fillStyle=flashCol; ctx.fillRect(0,0,VIEW_W,VIEW_H); ctx.globalAlpha=1; }
+  ctx.restore();
+}
+function drawSky(){
+  const c=COLORS[player?player.color:'pink'];
+  const g=ctx.createLinearGradient(0,0,0,VIEW_H);
+  if((player?player.color:'pink')==='pink'){ g.addColorStop(0,'#fff0f6'); g.addColorStop(1,'#ffe0ee'); }
+  else { g.addColorStop(0,'#eafdfd'); g.addColorStop(1,'#d6f6f6'); }
+  ctx.fillStyle=g; ctx.fillRect(0,0,VIEW_W,VIEW_H);
+  // 漂浮泡泡
+  ctx.fillStyle='rgba(255,255,255,.45)';
+  for(let i=0;i<7;i++){ const bx=((i*180 - camX*0.3)%900+900)%900-60; const by=60+((i*53)%200); const r=14+(i%3)*8; ctx.beginPath(); ctx.arc(bx,by,r,0,7); ctx.fill(); }
+}
+function drawTint(){
+  const c=COLORS[player?player.color:'pink'];
+  const g=ctx.createRadialGradient(VIEW_W/2,VIEW_H/2,VIEW_H*0.35,VIEW_W/2,VIEW_H/2,VIEW_H*0.95);
+  g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1, player&&player.color==='pink'?'rgba(255,40,110,.18)':'rgba(0,170,170,.18)');
+  ctx.fillStyle=g; ctx.fillRect(0,0,VIEW_W,VIEW_H);
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function drawTiles(){
+  const cs=Math.max(0,Math.floor(camX/TILE)-1), ce=Math.min(level.w-1,Math.floor((camX+VIEW_W)/TILE)+1);
+  for(let c=cs;c<=ce;c++)for(let r=0;r<ROWS;r++){
+    const ch=level.cells[r][c]; if(ch==='.'||ch==='*')continue; const x=c*TILE,y=r*TILE;
+    if(ch==='^'){
+      ctx.fillStyle='#8b93a6'; for(let i=0;i<2;i++){ const px=x+i*16; ctx.beginPath(); ctx.moveTo(px,y+TILE); ctx.lineTo(px+8,y+6); ctx.lineTo(px+16,y+TILE); ctx.closePath(); ctx.fill(); }
+      ctx.fillStyle='#c2c9d6'; for(let i=0;i<2;i++){ const px=x+i*16; ctx.beginPath(); ctx.moveTo(px+2,y+TILE); ctx.lineTo(px+8,y+9); ctx.lineTo(px+8,y+TILE); ctx.closePath(); ctx.fill(); }
+      continue;
+    }
+    let pal,active=true;
+    if(ch==='#') pal=NEUTRAL;
+    else if(ch==='P'){ pal=COLORS.pink; active=player.color==='pink'; }
+    else { pal=COLORS.cyan; active=player.color==='cyan'; }
+    if(active){
+      ctx.fillStyle=pal.main; roundRect(x+1,y+1,TILE-2,TILE-2,6); ctx.fill();
+      ctx.fillStyle=pal.lite; roundRect(x+3,y+3,TILE-6,7,4); ctx.fill();
+      ctx.fillStyle=pal.deep; ctx.fillRect(x+2,y+TILE-5,TILE-4,3);
+      if(ch!=='#'){ ctx.save(); ctx.globalAlpha=0.5+Math.sin(tick*0.12)*0.15; ctx.strokeStyle=pal.lite; ctx.lineWidth=2; roundRect(x+1,y+1,TILE-2,TILE-2,6); ctx.stroke(); ctx.restore(); }
+    } else {
+      ctx.save(); ctx.globalAlpha=0.9; ctx.setLineDash([5,4]); ctx.strokeStyle=pal.ghost; ctx.lineWidth=2; roundRect(x+2.5,y+2.5,TILE-5,TILE-5,6); ctx.stroke(); ctx.setLineDash([]);
+      ctx.globalAlpha=0.12; ctx.fillStyle=pal.main; roundRect(x+2.5,y+2.5,TILE-5,TILE-5,6); ctx.fill(); ctx.restore();
+    }
+  }
+}
+function drawGems(){
+  const cs=Math.max(0,Math.floor(camX/TILE)-1), ce=Math.min(level.w-1,Math.floor((camX+VIEW_W)/TILE)+1);
+  const bob=Math.sin(tick*0.13)*3;
+  for(let c=cs;c<=ce;c++)for(let r=0;r<ROWS;r++){ if(level.cells[r][c]!=='*')continue;
+    const cx=c*TILE+16, cy=r*TILE+16+bob; star(cx,cy,9,'#ffd84a','#fff4b0',tick*0.04);
+  }
+}
+function star(cx,cy,R,col,hi,rot){
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(rot);
+  ctx.fillStyle=col; ctx.beginPath();
+  for(let i=0;i<10;i++){ const a=i*Math.PI/5-Math.PI/2; const rr=i%2?R*0.45:R; ctx.lineTo(Math.cos(a)*rr,Math.sin(a)*rr); }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle=hi; ctx.beginPath(); ctx.arc(-2,-2,R*0.3,0,7); ctx.fill(); ctx.restore();
+}
+function drawGoal(){
+  const gx=level.goal.c*TILE, gy=GROUND-TILE*3;
+  ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(gx+TILE/2-2,gy,4,TILE*3);
+  const t=tick*0.05; for(let i=0;i<3;i++){ const yy=gy+i*10+Math.sin(t+i)*2;
+    ctx.fillStyle=i%2?COLORS.pink.main:COLORS.cyan.main; ctx.beginPath(); ctx.moveTo(gx+TILE/2+2,yy); ctx.lineTo(gx+TILE/2+22,yy+6); ctx.lineTo(gx+TILE/2+2,yy+12); ctx.closePath(); ctx.fill(); }
+  star(gx+TILE/2,gy-10,11,'#ffd84a','#fff4b0',tick*0.06);
+}
+function drawParts(){ for(const p of parts){ ctx.globalAlpha=Math.max(0,p.life/p.max); ctx.fillStyle=p.col; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.fill(); } ctx.globalAlpha=1; }
+function drawPlayer(){
+  if(player.dead)return;
+  const c=COLORS[player.color], x=player.x, y=player.y, w=player.w, h=player.h;
+  const sq=player.squash; const sw=1-sq*0.3, sh=1+sq*0.3;
+  ctx.save(); ctx.translate(x+w/2,y+h); ctx.scale(sw,sh); ctx.translate(-w/2,-h);
+  // 拖影
+  ctx.globalAlpha=0.25; ctx.fillStyle=c.lite; roundRect(-2,2,w+4,h,9); ctx.fill(); ctx.globalAlpha=1;
+  // 身体
+  ctx.fillStyle=c.main; roundRect(0,0,w,h,9); ctx.fill();
+  ctx.fillStyle=c.lite; roundRect(2,2,w-4,8,6); ctx.fill();
+  ctx.fillStyle=c.deep; roundRect(2,h-6,w-4,4,3); ctx.fill();
+  // 眼睛（朝向）
+  const ex=player.face>0?w*0.58:w*0.18;
+  ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(w*0.36,h*0.42,4,0,7); ctx.arc(w*0.64,h*0.42,4,0,7); ctx.fill();
+  ctx.fillStyle='#241'; const pd=player.face>0?1.2:-1.2;
+  ctx.beginPath(); ctx.arc(w*0.36+pd,h*0.42,2,0,7); ctx.arc(w*0.64+pd,h*0.42,2,0,7); ctx.fill();
+  // 腮红
+  ctx.fillStyle='rgba(255,255,255,.4)'; ctx.beginPath(); ctx.arc(w*0.24,h*0.6,2.5,0,7); ctx.arc(w*0.76,h*0.6,2.5,0,7); ctx.fill();
+  ctx.restore();
+}
+
+//================== 音效 ==================
+let actx=null, muted=false;
+function ac(){ if(!actx){ try{ actx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return actx; }
+function beep(f,d,t,v){ if(muted)return; const a=ac(); if(!a)return; const o=a.createOscillator(),g=a.createGain(); o.type=t||'square'; o.frequency.value=f; g.gain.value=v||0.06; o.connect(g); g.connect(a.destination); const tt=a.currentTime; o.start(tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+d); o.stop(tt+d); }
+function slide(f0,f1,d,t,v){ if(muted)return; const a=ac(); if(!a)return; const o=a.createOscillator(),g=a.createGain(); o.type=t||'sine'; g.gain.value=v||0.06; o.connect(g); g.connect(a.destination); const tt=a.currentTime; o.frequency.setValueAtTime(f0,tt); o.frequency.exponentialRampToValueAtTime(f1,tt+d); o.start(tt); g.gain.exponentialRampToValueAtTime(0.0001,tt+d); o.stop(tt+d); }
+function sfx(t){ switch(t){
+  case 'jump': beep(540,0.1,'square',0.05); break;
+  case 'swap': slide(player.color==='pink'?420:680, player.color==='pink'?680:420,0.16,'triangle',0.07); break;
+  case 'gem': beep(900,0.05,'square'); setTimeout(()=>beep(1250,0.07,'square'),45); break;
+  case 'dead': slide(400,120,0.4,'sawtooth',0.07); break;
+  case 'clear':[523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,0.14,'square'),i*110)); break;
+  case 'win':[523,659,784,1046,1318].forEach((f,i)=>setTimeout(()=>beep(f,0.18,'square'),i*120)); break;
+}}
+
+//================== HUD / 弹窗 ==================
+function updateHUD(){
+  document.getElementById('lvNum').textContent=lvIndex+1;
+  document.getElementById('lvTot').textContent=TOTAL;
+  document.getElementById('gemNum').textContent=gems;
+  if(player){ const c=COLORS[player.color]; const el=document.getElementById('colorName'); el.textContent=c.name; el.style.color=c.main;
+    document.getElementById('colorChip').style.borderColor=c.main; }
+}
+const OVS=['startOverlay','helpOverlay','clearOverlay','deadOverlay','winOverlay'];
+function showOverlay(id){ OVS.forEach(o=>document.getElementById(o).classList.toggle('hidden',o!==id)); }
+function hideOverlays(){ OVS.forEach(o=>document.getElementById(o).classList.add('hidden')); }
+
+//================== 流程 ==================
+function startGame(){ gems=0; swaps=0; elapsed=0; loadLevel(0); state='play'; hideOverlays(); ac(); }
+function nextLevel(){ loadLevel(lvIndex+1); state='play'; hideOverlays(); }
+function retryLevel(){ gems=gemsAtStart; loadLevel(lvIndex); state='play'; hideOverlays(); }
+function win(){ state='win'; sfx('win'); const sec=Math.round(elapsed/1000);
+  document.getElementById('winTime').textContent=sec+'s'; document.getElementById('winGem').textContent=gems; document.getElementById('winSwap').textContent=swaps;
+  let best=null; try{ best=JSON.parse(localStorage.getItem('hueShiftBest')||'null'); }catch(e){}
+  const cur={t:sec,g:gems}; let msg='';
+  if(!best||sec<best.t){ localStorage.setItem('hueShiftBest',JSON.stringify(cur)); msg='🎉 新纪录！'; } else msg=`最佳：${best.t}s · ${best.g}★`;
+  document.getElementById('winBest').textContent=msg; showOverlay('winOverlay');
+}
+
+//================== 输入 ==================
+const KL={ArrowLeft:1,KeyA:1},KR={ArrowRight:1,KeyD:1},KJ={Space:1,ArrowUp:1,KeyW:1},KS={ShiftLeft:1,ShiftRight:1,KeyJ:1,KeyK:1};
+addEventListener('keydown',e=>{
+  if(KL[e.code]){ input.left=true; e.preventDefault(); }
+  else if(KR[e.code]){ input.right=true; e.preventDefault(); }
+  else if(KJ[e.code]){ if(!e.repeat)input.jumpPressed=true; input.jumpHeld=true; e.preventDefault(); }
+  else if(KS[e.code]){ if(!e.repeat)swapColor(); e.preventDefault(); }
+});
+addEventListener('keyup',e=>{ if(KL[e.code])input.left=false; else if(KR[e.code])input.right=false; else if(KJ[e.code])input.jumpHeld=false; });
+function bindTouch(id,on,off){ const el=document.getElementById(id);
+  const d=e=>{ e.preventDefault(); el.classList.add('active'); on(); };
+  const u=e=>{ e.preventDefault(); el.classList.remove('active'); if(off)off(); };
+  el.addEventListener('touchstart',d,{passive:false}); el.addEventListener('touchend',u,{passive:false}); el.addEventListener('touchcancel',u,{passive:false});
+  el.addEventListener('mousedown',d); el.addEventListener('mouseup',u); el.addEventListener('mouseleave',()=>{ el.classList.remove('active'); if(off)off(); });
+}
+bindTouch('btnLeft',()=>input.left=true,()=>input.left=false);
+bindTouch('btnRight',()=>input.right=true,()=>input.right=false);
+bindTouch('btnJump',()=>{ input.jumpPressed=true; input.jumpHeld=true; },()=>input.jumpHeld=false);
+bindTouch('btnSwap',()=>swapColor());
+document.getElementById('startBtn').onclick=()=>{ ac(); startGame(); };
+document.getElementById('helpBtn').onclick=()=>{ if(state==='play')state='paused'; document.getElementById('helpOverlay').classList.remove('hidden'); };
+document.getElementById('helpCloseBtn').onclick=()=>{ document.getElementById('helpOverlay').classList.add('hidden'); if(state==='paused')state='play'; };
+document.getElementById('nextBtn').onclick=nextLevel;
+document.getElementById('retryBtn').onclick=retryLevel;
+document.getElementById('againBtn').onclick=startGame;
+document.getElementById('restartBtn').onclick=()=>{ if(state==='play'||state==='dead'||state==='paused')retryLevel(); };
+document.getElementById('muteBtn').onclick=function(){ muted=!muted; this.textContent=muted?'🔇':'🔊'; };
+document.getElementById('shareBtn').onclick=function(){ const sec=Math.round(elapsed/1000);
+  const txt=`我在《色相位移》用 ${sec}s、${swaps} 次变色通关，捡了 ${gems} 颗星 ✨🟣🔵 你能更快吗？`;
+  if(navigator.clipboard){ navigator.clipboard.writeText(txt).then(()=>this.textContent='✓ 已复制，去粘贴吧！',()=>this.textContent=txt); } else this.textContent=txt;
+};
+
+//================== 自适应 ==================
+function fit(){ const maxW=document.getElementById('wrap').clientWidth-16, maxH=window.innerHeight*0.64; const s=Math.min(maxW/VIEW_W,maxH/VIEW_H); cv.style.width=Math.floor(VIEW_W*s)+'px'; cv.style.height=Math.floor(VIEW_H*s)+'px'; }
+addEventListener('resize',fit);
+
+//================== 主循环 ==================
+let lastT=0,accF=0;
+function loop(t){ if(!lastT)lastT=t; let dt=(t-lastT)/1000; lastT=t; if(dt>0.1)dt=0.1;
+  if(state==='play'){ elapsed+=dt*1000; accF+=dt*60; let s=0; while(accF>=1&&s<5){ update(); accF-=1; s++; } }
+  else { accF=0; if(state!=='play')updateParts(); }
+  render(); requestAnimationFrame(loop);
+}
+loadLevel(0); fit(); showOverlay('startOverlay'); requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>

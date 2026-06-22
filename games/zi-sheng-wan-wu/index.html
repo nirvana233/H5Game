@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>字生万物 · 汉字炼成</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root{
+    --ink:#2b2620; --ink2:#6b6051; --paper:#f4ecd8; --paper2:#ece1c6;
+    --cinnabar:#c1432e; --gold:#b8893a; --jade:#5a8f6e;
+  }
+  html,body{
+    height:100%; overflow:hidden; user-select:none;
+    font-family:"Songti SC","STSong","SimSun",-apple-system,"PingFang SC",serif;
+    color:var(--ink);
+    background:
+      radial-gradient(120% 80% at 50% -10%, #fbf6e7 0%, var(--paper) 55%, var(--paper2) 100%);
+    display:flex; flex-direction:column; align-items:center;
+  }
+  body::before{ /* 宣纸纹理 */
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.5; mix-blend-mode:multiply;
+    background-image:
+      radial-gradient(circle at 20% 30%, rgba(150,120,70,.05) 0 2px, transparent 2px),
+      radial-gradient(circle at 70% 60%, rgba(150,120,70,.05) 0 2px, transparent 2px),
+      radial-gradient(circle at 40% 80%, rgba(150,120,70,.05) 0 2px, transparent 2px);
+    background-size:23px 23px, 31px 31px, 17px 17px;
+  }
+  #app{ width:100%; max-width:460px; height:100%; display:flex; flex-direction:column; padding:8px 12px env(safe-area-inset-bottom,12px); }
+
+  /* 顶栏 */
+  header{ display:flex; align-items:center; justify-content:space-between; padding:6px 2px 10px; }
+  .title{ font-size:22px; font-weight:900; letter-spacing:3px; }
+  .title .seal{ color:var(--cinnabar); }
+  .tools{ display:flex; gap:8px; }
+  .ibtn{
+    width:36px; height:36px; border:1.5px solid rgba(120,90,40,.35); border-radius:10px;
+    background:rgba(255,255,255,.4); font-size:16px; cursor:pointer; color:var(--ink2);
+  }
+  .ibtn:active{ transform:scale(.92); }
+
+  /* 进度 */
+  #prog{ display:flex; align-items:center; gap:10px; padding:0 2px 8px; }
+  #bar{ flex:1; height:8px; background:rgba(120,90,40,.18); border-radius:6px; overflow:hidden; }
+  #barFill{ height:100%; width:0; background:linear-gradient(90deg,var(--gold),var(--cinnabar)); border-radius:6px; transition:width .5s; }
+  #progTxt{ font-size:13px; font-weight:800; color:var(--ink2); white-space:nowrap; }
+
+  /* 炼炉 */
+  #furnace{
+    display:flex; align-items:center; justify-content:center; gap:6px; margin:2px 0 12px;
+  }
+  .slot{
+    width:64px; height:64px; border-radius:14px; display:flex; align-items:center; justify-content:center;
+    font-size:38px; font-weight:900; line-height:1;
+    border:2px dashed rgba(120,90,40,.5); background:rgba(255,255,255,.45); color:var(--ink);
+    transition:transform .15s, box-shadow .2s, border-color .2s;
+  }
+  .slot.filled{ border-style:solid; border-color:var(--gold); box-shadow:0 4px 10px rgba(180,137,58,.3); }
+  .op{ font-size:24px; color:var(--cinnabar); font-weight:900; }
+  #result{
+    width:78px; height:78px; border-radius:16px; display:flex; align-items:center; justify-content:center;
+    font-size:46px; font-weight:900; line-height:1;
+    border:2px solid rgba(120,90,40,.3); background:rgba(255,255,255,.3); color:var(--ink2);
+  }
+  #result.reveal{ animation:reveal .6s cubic-bezier(.2,1.5,.4,1); border-color:var(--cinnabar); color:var(--cinnabar); box-shadow:0 0 0 6px rgba(193,67,46,.12), 0 8px 22px rgba(193,67,46,.3); }
+  @keyframes reveal{ 0%{transform:scale(.2) rotate(-25deg); opacity:0} 60%{transform:scale(1.25) rotate(6deg)} 100%{transform:scale(1) rotate(0)} }
+  #furnace.shake{ animation:shake .4s; }
+  @keyframes shake{ 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(7px)} 60%{transform:translateX(-5px)} 80%{transform:translateX(4px)} }
+
+  /* 字库网格 */
+  #grid{
+    flex:1; overflow-y:auto; display:grid; gap:8px; padding:2px;
+    grid-template-columns:repeat(6,1fr); align-content:start;
+    -webkit-overflow-scrolling:touch;
+  }
+  .cell{
+    aspect-ratio:1; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    font-size:26px; font-weight:900; line-height:1; cursor:pointer; position:relative;
+    background:linear-gradient(180deg,#fffdf6,#f0e6cd);
+    border:1.5px solid rgba(120,90,40,.25);
+    box-shadow:0 2px 0 rgba(120,90,40,.2);
+    transition:transform .12s, box-shadow .15s;
+  }
+  .cell:active{ transform:translateY(2px); box-shadow:0 0 0 rgba(120,90,40,.2); }
+  .cell.locked{ color:rgba(120,90,40,.35); background:rgba(120,90,40,.06); box-shadow:none; cursor:default; font-size:22px; }
+  .cell.base::after{ content:"本"; position:absolute; top:2px; right:4px; font-size:9px; color:var(--jade); opacity:.7; }
+  .cell.fresh{ animation:fresh .8s ease; }
+  @keyframes fresh{ 0%{box-shadow:0 0 0 0 rgba(193,67,46,.6)} 100%{box-shadow:0 0 0 14px rgba(193,67,46,0)} }
+  .cell.hint{ animation:hintp 1s ease-in-out 3; }
+  @keyframes hintp{ 0%,100%{box-shadow:0 2px 0 rgba(120,90,40,.2)} 50%{box-shadow:0 0 0 5px rgba(90,143,110,.5)} }
+  .cell.sel{ outline:3px solid var(--gold); outline-offset:-2px; }
+
+  /* toast */
+  #toast{
+    position:fixed; left:50%; bottom:96px; transform:translateX(-50%) translateY(20px);
+    background:rgba(43,38,32,.92); color:#f4ecd8; padding:10px 18px; border-radius:20px;
+    font-size:15px; font-weight:700; opacity:0; pointer-events:none; transition:.3s; z-index:50; white-space:nowrap;
+    box-shadow:0 6px 20px rgba(0,0,0,.3);
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* 弹窗 */
+  .overlay{ position:fixed; inset:0; z-index:99; display:flex; align-items:center; justify-content:center; padding:24px;
+    background:rgba(43,38,32,.55); backdrop-filter:blur(4px); }
+  .overlay.hidden{ display:none; }
+  .card{
+    background:linear-gradient(180deg,#fdf8ea,#f1e7cf); border-radius:22px; padding:26px 22px; max-width:340px; width:100%;
+    text-align:center; box-shadow:0 18px 50px rgba(0,0,0,.35); border:1px solid rgba(180,137,58,.4);
+    animation:pop .35s cubic-bezier(.3,1.4,.5,1); max-height:86vh; overflow-y:auto;
+  }
+  @keyframes pop{ from{transform:scale(.8);opacity:0} to{transform:scale(1);opacity:1} }
+  .card .seal{ color:var(--cinnabar); }
+  .card h1{ font-size:26px; letter-spacing:4px; margin-bottom:6px; }
+  .card .sub{ font-size:14px; color:var(--ink2); line-height:1.7; margin-bottom:16px; }
+  .hintbox{ background:rgba(120,90,40,.08); border-radius:14px; padding:12px 14px; font-size:13.5px; line-height:1.9; text-align:left; color:var(--ink2); margin-bottom:18px; }
+  .hintbox b{ color:var(--cinnabar); }
+  .btn{ display:block; width:100%; border:none; border-radius:14px; padding:13px; font-size:17px; font-weight:800; cursor:pointer;
+    margin-top:10px; color:#fdf8ea; letter-spacing:2px; font-family:inherit;
+    background:linear-gradient(180deg,#c1432e,#9c2f20); box-shadow:0 4px 0 #7d2517; }
+  .btn:active{ transform:translateY(3px); box-shadow:0 1px 0 #7d2517; }
+  .btn.ghost{ background:linear-gradient(180deg,#efe5cc,#ddd0ad); box-shadow:0 4px 0 #c0b48f; color:var(--ink); }
+  .btn.ghost:active{ box-shadow:0 1px 0 #c0b48f; }
+  /* 详情 */
+  #detailChar{ font-size:72px; font-weight:900; color:var(--cinnabar); line-height:1; margin-bottom:6px; }
+  #detailRecipe{ font-size:18px; color:var(--ink2); margin-bottom:10px; letter-spacing:1px; }
+  #detailGloss{ font-size:15px; line-height:1.8; color:var(--ink); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title">字<span class="seal">生</span>万物</div>
+    <div class="tools">
+      <button class="ibtn" id="hintBtn" title="灵感">💡</button>
+      <button class="ibtn" id="muteBtn" title="静音">🔊</button>
+      <button class="ibtn" id="helpBtn" title="玩法">？</button>
+    </div>
+  </header>
+
+  <div id="prog">
+    <div id="bar"><div id="barFill"></div></div>
+    <div id="progTxt">0 / 0</div>
+  </div>
+
+  <div id="furnace">
+    <div class="slot" id="slotA"></div>
+    <div class="op">＋</div>
+    <div class="slot" id="slotB"></div>
+    <div class="op">＝</div>
+    <div id="result">？</div>
+  </div>
+
+  <div id="grid"></div>
+</div>
+
+<div id="toast"></div>
+
+<!-- 开始 -->
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <h1>字<span class="seal">生</span>万物</h1>
+    <div class="sub">仓颉造字，从无到有<br>两字相撞，炼成万千汉字</div>
+    <div class="hintbox">
+      🔥 点亮两个字放进<b>炼炉</b>，按真实造字法合成新字<br>
+      🌳 木 ＋ 木 ＝ <b>林</b>，林 ＋ 木 ＝ <b>森</b><br>
+      💡 卡住了点「灵感」找方向<br>
+      📜 点已发现的字看它的<b>由来释义</b><br>
+      🏆 目标：点亮全部汉字，封神成圣
+    </div>
+    <button class="btn" id="startBtn">开 始 炼 字</button>
+  </div>
+</div>
+
+<!-- 字详情 -->
+<div class="overlay hidden" id="detailOverlay">
+  <div class="card">
+    <div id="detailChar">林</div>
+    <div id="detailRecipe">木 ＋ 木</div>
+    <div id="detailGloss">双木成林。</div>
+    <button class="btn ghost" id="detailClose">关 闭</button>
+  </div>
+</div>
+
+<!-- 通关 -->
+<div class="overlay hidden" id="winOverlay">
+  <div class="card">
+    <h1>封 <span class="seal">圣</span></h1>
+    <div class="sub" id="winSub">你点亮了天地间全部汉字！<br>仓颉之后，又一位造字之圣。</div>
+    <button class="btn" id="winShare">📤 晒出我的造字成就</button>
+    <button class="btn ghost" id="winClose">继续把玩</button>
+  </div>
+</div>
+
+<script>
+/* ============ 配方数据：基础字 + 会意合成网络 ============ */
+const BASES = ['木','火','水','土','日','月','人','口','女','子','目','心','田','力','石','山'];
+
+// [原料A, 原料B, 产物, 释义]
+const RAW = [
+  ['木','木','林','双木成林，郁郁葱葱。'],
+  ['林','木','森','三木为森，深不可测。'],
+  ['木','人','休','人倚木而息，是为休。'],
+  ['木','子','李','木之子，李树春来满枝。'],
+  ['木','目','相','以目观木，相看两不厌。'],
+  ['相','心','想','心中存相，便成想念。'],
+  ['木','日','东','日升于木梢，是为东方。'],
+  ['木','口','困','木被四壁所围，进退维谷。'],
+  ['火','火','炎','二火相叠，热浪炎炎。'],
+  ['炎','火','焱','三火腾空，烈焰灼天。'],
+  ['林','火','焚','火烧丛林，谓之焚。'],
+  ['火','土','灶','垒土承火，造一方灶。'],
+  ['水','土','泥','水浸于土，化作软泥。'],
+  ['日','月','明','日月同辉，天地大明。'],
+  ['日','日','昌','双日昭昭，繁荣昌盛。'],
+  ['月','月','朋','两月相伴，是为朋友。'],
+  ['人','人','从','一人随一人，谓之从。'],
+  ['从','人','众','三人成群，万众一心。'],
+  ['口','口','吕','双口相承，古之律吕。'],
+  ['吕','口','品','三口评议，方分高下品级。'],
+  ['土','土','圭','双土相垒，古之玉圭。'],
+  ['女','子','好','女子相依，岂不美好。'],
+  ['田','力','男','田间出力者，是为男。'],
+  ['田','心','思','心驰于田，念念为思。'],
+  ['石','石','磊','累石成堆，光明磊落。'],
+  ['山','山','出','山外有山，破土而出。'],
+  ['山','石','岩','石倚高山，巍然成岩。'],
+  ['人','山','仙','人入深山，修炼成仙。'],
+];
+const BASE_GLOSS = {
+  '木':'万物生长，根植大地。','火':'跳动的光与热。','水':'上善若水，润泽万物。',
+  '土':'厚德载物，大地之基。','日':'东升西落的太阳。','月':'阴晴圆缺的月亮。',
+  '人':'顶天立地，一撇一捺。','口':'能言善道，吞吐天地。','女':'温柔却坚韧。',
+  '子':'新生的希望。','目':'观察世界的眼睛。','心':'万念由此而生。',
+  '田':'阡陌纵横的良田。','力':'使出来的那股劲。','石':'沉默而坚硬。','山':'巍峨高耸。'
+};
+
+// 构建配方索引（键无序）
+const sk = (a,b)=> [a,b].sort().join('');
+const RECIPE = {};         // 键 -> 产物
+const GLOSS = {...BASE_GLOSS};
+const MADE_BY = {};        // 产物 -> "原料A ＋ 原料B"
+RAW.forEach(([a,b,r,g])=>{ RECIPE[sk(a,b)] = r; GLOSS[r]=g; MADE_BY[r]=`${a} ＋ ${b}`; });
+
+// 可达字全集（用于图鉴顺序与总数）：基础在前，产物按定义顺序
+const ALL = [...BASES, ...RAW.map(x=>x[2])];
+const TOTAL = ALL.length;
+const BASE_SET = new Set(BASES);
+
+/* ============ 状态（localStorage 持久化收集进度）============ */
+const SAVE_KEY = 'zsww_discovered_v1';
+let discovered = new Set(BASES);
+try{ const s = JSON.parse(localStorage.getItem(SAVE_KEY)); if(Array.isArray(s)) s.forEach(c=>{ if(ALL.includes(c)) discovered.add(c); }); }catch(e){}
+function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify([...discovered])); }catch(e){} }
+
+let furnace = [];      // 炉中原料（最多2）
+let muted = false;
+let busy = false;
+
+/* ============ 渲染 ============ */
+const grid = document.getElementById('grid');
+const slotA = document.getElementById('slotA');
+const slotB = document.getElementById('slotB');
+const result = document.getElementById('result');
+const furnaceEl = document.getElementById('furnace');
+
+function renderGrid(){
+  grid.innerHTML = '';
+  ALL.forEach(ch=>{
+    const found = discovered.has(ch);
+    const cell = document.createElement('div');
+    cell.className = 'cell' + (found ? '' : ' locked') + (found && BASE_SET.has(ch) ? ' base' : '');
+    cell.textContent = found ? ch : '？';
+    cell.dataset.ch = ch;
+    if(found){
+      cell.addEventListener('click', ()=> onCellTap(ch, cell));
+    }
+    grid.appendChild(cell);
+  });
+  updateProg();
+}
+function cellOf(ch){ return grid.querySelector(`.cell[data-ch="${ch}"]`); }
+
+function updateProg(){
+  const n = [...discovered].filter(c=>ALL.includes(c)).length;
+  document.getElementById('progTxt').textContent = `${n} / ${TOTAL}`;
+  document.getElementById('barFill').style.width = (n/TOTAL*100)+'%';
+}
+
+function renderFurnace(){
+  slotA.textContent = furnace[0] || '';
+  slotB.textContent = furnace[1] || '';
+  slotA.classList.toggle('filled', !!furnace[0]);
+  slotB.classList.toggle('filled', !!furnace[1]);
+  // 高亮当前选中
+  grid.querySelectorAll('.cell.sel').forEach(c=>c.classList.remove('sel'));
+}
+
+/* ============ 交互核心 ============ */
+function onCellTap(ch, cell){
+  if(busy) return;
+  if(furnace.length === 0){
+    furnace = [ch];
+    result.textContent = '？'; result.className = '';
+    renderFurnace();
+    beep(440);
+  } else if(furnace.length === 1){
+    furnace = [furnace[0], ch];
+    renderFurnace();
+    beep(520);
+    combine();
+  }
+}
+
+async function combine(){
+  busy = true;
+  const [a,b] = furnace;
+  const r = RECIPE[sk(a,b)];
+  await sleep(180);
+  if(r){
+    const isNew = !discovered.has(r);
+    result.textContent = r;
+    result.classList.remove('reveal'); void result.offsetWidth; result.classList.add('reveal');
+    if(isNew){
+      discovered.add(r); save();
+      renderGrid();
+      const c = cellOf(r);
+      if(c){ c.classList.add('fresh'); }
+      beep(880); setTimeout(()=>beep(1175),90);
+      toast(`✨ 炼成新字「${r}」！`);
+      if([...discovered].filter(c=>ALL.includes(c)).length === TOTAL){
+        setTimeout(showWin, 700);
+      }
+    } else {
+      beep(700);
+      toast(`「${r}」已在图鉴中`);
+    }
+  } else {
+    furnaceEl.classList.remove('shake'); void furnaceEl.offsetWidth; furnaceEl.classList.add('shake');
+    result.textContent = '✕'; result.className = '';
+    beep(160);
+    toast('这两个字凑不出新字～');
+  }
+  await sleep(620);
+  furnace = [];
+  result.textContent = '？'; result.className = '';
+  renderFurnace();
+  busy = false;
+}
+
+/* ============ 灵感提示 ============ */
+function useHint(){
+  if(busy) return;
+  // 找一个：产物未发现，但两原料都已发现的配方
+  const cand = RAW.filter(([a,b,r])=> !discovered.has(r) && discovered.has(a) && discovered.has(b));
+  if(cand.length === 0){
+    toast(discovered.size>=TOTAL ? '全部点亮，已无须灵感！' : '现有的字暂时凑不出新花样，再多炼几个吧');
+    return;
+  }
+  const pick = cand[Math.random()*cand.length|0];
+  // 高亮其中一个原料格，给个方向
+  const hintCh = Math.random()<0.5 ? pick[0] : pick[1];
+  const c = cellOf(hintCh);
+  if(c){
+    grid.querySelectorAll('.cell.hint').forEach(x=>x.classList.remove('hint'));
+    void c.offsetWidth; c.classList.add('hint');
+    c.scrollIntoView({block:'nearest', behavior:'smooth'});
+    setTimeout(()=>c.classList.remove('hint'), 3100);
+  }
+  toast(`试试用「${hintCh}」搭配点什么…`);
+  beep(660);
+}
+
+/* ============ 字详情 ============ */
+function showDetail(ch){
+  document.getElementById('detailChar').textContent = ch;
+  document.getElementById('detailRecipe').textContent = MADE_BY[ch] || '天地本源 · 基础字';
+  document.getElementById('detailGloss').textContent = GLOSS[ch] || '';
+  document.getElementById('detailOverlay').classList.remove('hidden');
+}
+// 长按字库格看释义
+let pressTimer = null;
+grid.addEventListener('touchstart', e=>{
+  const cell = e.target.closest('.cell'); if(!cell || cell.classList.contains('locked')) return;
+  pressTimer = setTimeout(()=>{ pressTimer=null; showDetail(cell.dataset.ch); }, 450);
+}, {passive:true});
+grid.addEventListener('touchend', ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } });
+grid.addEventListener('touchmove', ()=>{ if(pressTimer){ clearTimeout(pressTimer); pressTimer=null; } });
+// 桌面端右键看释义
+grid.addEventListener('contextmenu', e=>{
+  const cell = e.target.closest('.cell'); if(!cell || cell.classList.contains('locked')) return;
+  e.preventDefault(); showDetail(cell.dataset.ch);
+});
+
+/* ============ 通关 / 分享 ============ */
+function showWin(){
+  document.getElementById('winSub').innerHTML = `你点亮了天地间全部 <b class="seal">${TOTAL}</b> 个汉字！<br>仓颉之后，又一位造字之圣。`;
+  document.getElementById('winOverlay').classList.remove('hidden');
+  beep(1318); setTimeout(()=>beep(1568),120); setTimeout(()=>beep(2093),240);
+}
+function share(){
+  const n = [...discovered].filter(c=>ALL.includes(c)).length;
+  const showcase = [...discovered].filter(c=>!BASE_SET.has(c)).slice(-4).join('') || '林森明好';
+  const txt = `我在《字生万物》炼成了 ${n}/${TOTAL} 个汉字，最得意的是「${showcase}」🔥\n两字相撞，从无到有造字！你能造出几个？`;
+  if(navigator.share){ navigator.share({title:'字生万物', text:txt, url:location.href}).catch(()=>{}); }
+  else{ navigator.clipboard?.writeText(txt+' '+location.href); alert('成就已复制，去分享给好友吧！\n\n'+txt); }
+}
+
+/* ============ 工具 ============ */
+const sleep = ms => new Promise(r=>setTimeout(r,ms));
+let toastTimer;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>t.classList.remove('show'), 1500);
+}
+let actx;
+function beep(freq){
+  if(muted) return;
+  try{
+    actx = actx || new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain();
+    o.frequency.value=freq; o.type='triangle';
+    o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(0.07, actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime+0.22);
+    o.start(); o.stop(actx.currentTime+0.24);
+  }catch(e){}
+}
+
+/* ============ 事件绑定 ============ */
+document.getElementById('startBtn').onclick = ()=>{ document.getElementById('startOverlay').classList.add('hidden'); };
+document.getElementById('helpBtn').onclick = ()=> document.getElementById('startOverlay').classList.remove('hidden');
+document.getElementById('hintBtn').onclick = useHint;
+document.getElementById('detailClose').onclick = ()=> document.getElementById('detailOverlay').classList.add('hidden');
+document.getElementById('winShare').onclick = share;
+document.getElementById('winClose').onclick = ()=> document.getElementById('winOverlay').classList.add('hidden');
+document.getElementById('muteBtn').onclick = e=>{ muted=!muted; e.target.textContent = muted?'🔇':'🔊'; };
+
+renderGrid();
+renderFurnace();
+</script>
+</body>
+</html>

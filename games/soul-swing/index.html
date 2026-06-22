@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0a0a18">
+<title>荡魂 · Soul Swing</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0a18; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+  #game { position: fixed; inset: 0; display: block; }
+
+  .layer { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+           color: #eef; text-align: center; pointer-events: none; }
+  .layer.show { pointer-events: auto; }
+
+  .title { font-size: 13vw; font-weight: 800; letter-spacing: .25em; text-indent: .25em;
+           background: linear-gradient(180deg, #8ff, #6af 60%, #b8f);
+           -webkit-background-clip: text; background-clip: text; color: transparent;
+           text-shadow: 0 0 30px rgba(120,180,255,.35); }
+  .sub { margin-top: 1vh; font-size: 4.2vw; color: #9ab; letter-spacing: .1em; }
+  .hint { margin-top: 5vh; font-size: 4vw; color: #cde; line-height: 1.9; opacity: .9; }
+  .hint b { color: #8ff; }
+
+  .btn { pointer-events: auto; margin-top: 6vh; padding: 3.2vw 12vw; font-size: 5.5vw; font-weight: 700;
+         color: #04121f; border: none; border-radius: 999px; cursor: pointer;
+         background: linear-gradient(180deg, #9ff, #4ad);
+         box-shadow: 0 8px 30px rgba(80,200,255,.5), inset 0 2px 4px rgba(255,255,255,.6);
+         transition: transform .08s; }
+  .btn:active { transform: scale(.94); }
+
+  .gostat { font-size: 5vw; color: #cde; margin: .6vh 0; }
+  .gostat b { font-size: 11vw; color: #8ff; display: block; line-height: 1.1; text-shadow: 0 0 20px rgba(120,220,255,.5); }
+  .new { color: #ffd76a; font-size: 4.5vw; font-weight: 700; animation: pop .5s; }
+  @keyframes pop { 0%{transform:scale(0)} 70%{transform:scale(1.25)} 100%{transform:scale(1)} }
+
+  .row { display: flex; gap: 3vw; }
+  .btn.ghost { background: rgba(255,255,255,.1); color: #cde; box-shadow: inset 0 0 0 2px rgba(160,200,255,.4); }
+
+  #hud { position: fixed; top: 0; left: 0; right: 0; padding: env(safe-area-inset-top,12px) 16px 0;
+         display: flex; justify-content: space-between; align-items: flex-start; pointer-events: none; }
+  .score { font-size: 9vw; font-weight: 800; color: #fff; text-shadow: 0 2px 12px rgba(0,0,0,.6); line-height: 1; }
+  .best { font-size: 3.6vw; color: #9bd; margin-top: 1vw; letter-spacing: .05em; }
+  .combo { font-size: 5vw; font-weight: 800; color: #ffd76a; text-shadow: 0 0 12px rgba(255,200,80,.6); }
+  .hidden { display: none !important; }
+  .fade { transition: opacity .35s; }
+  .fade.out { opacity: 0; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <div>
+    <div class="score" id="score">0</div>
+    <div class="best" id="bestHud">最佳 0</div>
+  </div>
+  <div class="combo hidden" id="combo"></div>
+</div>
+
+<div class="layer show fade" id="menu">
+  <div class="title">荡魂</div>
+  <div class="sub">SOUL&nbsp;SWING</div>
+  <div class="hint">没有跳跃。<br><b>按住</b>朝光点甩出灵魂之绳<br><b>松手</b>借惯性飞跃深渊<br>掉下去就魂飞魄散</div>
+  <button class="btn" id="startBtn">开 始</button>
+</div>
+
+<div class="layer fade hidden" id="over">
+  <div class="gostat">飞越了<b id="finalScore">0</b>米</div>
+  <div class="new hidden" id="newBest">★ 新纪录 ★</div>
+  <div class="gostat" style="font-size:4vw;margin-top:2vh">最佳 <span id="bestOver">0</span> 米</div>
+  <div class="row">
+    <button class="btn" id="retryBtn">再 来</button>
+    <button class="btn ghost" id="shareBtn">晒 分</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const cv = document.getElementById('game');
+  const ctx = cv.getContext('2d');
+  let W = 0, H = 0, DPR = 1, S = 1; // S = 缩放系数，让手感跨设备一致
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2.5);
+    W = window.innerWidth; H = window.innerHeight;
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    S = Math.min(Math.max(H / 720, 0.6), 2);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // ---------- 极简音效（WebAudio） ----------
+  let AC = null, muted = false;
+  function actx() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } return AC; }
+  function beep(freq, dur, type, vol) {
+    if (muted) return; const a = actx(); if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || 'sine'; o.frequency.value = freq;
+    g.gain.value = (vol || 0.12);
+    o.connect(g); g.connect(a.destination);
+    const t = a.currentTime; o.start(t);
+    g.gain.setValueAtTime(g.gain.value, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.12));
+    o.frequency.exponentialRampToValueAtTime(Math.max(40, freq * 0.6), t + (dur || 0.12));
+    o.stop(t + (dur || 0.12) + 0.02);
+  }
+
+  // ---------- 状态 ----------
+  const ST = { MENU: 0, PLAY: 1, OVER: 2 };
+  let state = ST.MENU;
+  let best = +(localStorage.getItem('soulswing_best') || 0);
+
+  const player = { x: 0, y: 0, vx: 0, vy: 0, r: 12 };
+  let anchors = [];   // {x,y,used}
+  let orbs = [];      // {x,y,got}
+  let particles = [];
+  let trail = [];
+  let stars = [];
+  let cam = 0;        // 相机 x
+  let hooked = null;  // 当前钩住的锚点
+  let ropeLen = 0;
+  let pressing = false;
+  let score = 0, bonus = 0, combo = 0, comboTimer = 0;
+  let shake = 0;
+  let spawnX = 0;     // 已生成到的 x
+  let bg1 = 0, bg2 = 0;
+  let elapsed = 0;
+  let dead = false, deadTimer = 0;
+
+  const G = 2200;          // 重力
+  const MAXROPE = () => 330 * S;
+  const DEATHY = () => H + 80;
+
+  function reset() {
+    player.x = 120 * S; player.y = H * 0.35;
+    player.vx = 360 * S; player.vy = -240 * S; player.r = 12 * S;
+    anchors = []; orbs = []; particles = []; trail = [];
+    cam = 0; hooked = null; pressing = false;
+    score = 0; bonus = 0; combo = 0; comboTimer = 0; shake = 0;
+    spawnX = 0; elapsed = 0; dead = false; deadTimer = 0;
+    stars = [];
+    for (let i = 0; i < 90; i++) stars.push({ x: Math.random() * W * 3, y: Math.random() * H, z: 0.2 + Math.random() * 0.8, s: Math.random() * 1.8 + 0.4 });
+    ensureSpawn(player.x + W * 2);
+    // 保证开局第一个锚点必定可达（在玩家上方、绳长内）
+    if (anchors.length) { anchors[0].x = 300 * S; anchors[0].y = H * 0.2; anchors[0].used = false; }
+  }
+
+  // 程序化生成锚点 + 灵魂珠
+  function ensureSpawn(toX) {
+    while (spawnX < toX) {
+      const diff = Math.min(elapsedDist() / 5000, 1); // 0→1 难度
+      const gap = (190 + diff * 130) * S + Math.random() * 70 * S;
+      spawnX += gap;
+      const yTop = H * (0.16 + 0.04 * diff);
+      const yBot = H * (0.52 - 0.06 * diff);
+      const ay = yTop + Math.random() * (yBot - yTop);
+      anchors.push({ x: spawnX, y: ay, used: false, pulse: Math.random() * 6 });
+      // 在两锚点之间偶尔放灵魂珠（鼓励荡的弧线）
+      if (Math.random() < 0.7) {
+        orbs.push({ x: spawnX - gap * (0.35 + Math.random() * 0.3), y: ay + (80 + Math.random() * 120) * S, got: false, ph: Math.random() * 6 });
+      }
+    }
+  }
+  function elapsedDist() { return Math.max(0, player.x - 120 * S); }
+
+  // ---------- 输入 ----------
+  function tryHook() {
+    // 选择：在绳长范围内、位于玩家上方、且尽量靠前的锚点
+    let bestA = null, bestCost = Infinity;
+    for (const a of anchors) {
+      const dx = a.x - player.x, dy = a.y - player.y;
+      const d = Math.hypot(dx, dy);
+      if (d > MAXROPE() || d < 30 * S) continue;
+      if (a.y > player.y - 10 * S) continue;          // 必须在上方
+      if (a.x < player.x - 80 * S) continue;          // 不往回钩
+      const cost = d - (a.x - player.x) * 0.4;          // 偏好靠前的
+      if (cost < bestCost) { bestCost = cost; bestA = a; }
+    }
+    if (bestA) {
+      hooked = bestA; bestA.used = true;
+      ropeLen = Math.hypot(bestA.x - player.x, bestA.y - player.y);
+      beep(520, 0.08, 'triangle', 0.10);
+      for (let i = 0; i < 6; i++) burst(bestA.x, bestA.y, '#8ff', 1);
+    }
+  }
+  function release() {
+    if (hooked) { beep(360, 0.1, 'sine', 0.10); hooked = null; }
+  }
+  function down(x, y) {
+    if (state === ST.MENU) return;
+    if (state === ST.OVER) return;
+    pressing = true; tryHook();
+  }
+  function up() {
+    pressing = false; release();
+  }
+  function onDown(e) { const p = pos(e); actx(); down(p.x, p.y); }
+  function onUp(e) { up(); }
+  function pos(e) { const t = e.touches ? e.touches[0] : e; return { x: t.clientX, y: t.clientY }; }
+  cv.addEventListener('touchstart', e => { e.preventDefault(); onDown(e); }, { passive: false });
+  cv.addEventListener('touchend', e => { e.preventDefault(); onUp(e); }, { passive: false });
+  cv.addEventListener('mousedown', onDown);
+  window.addEventListener('mouseup', onUp);
+
+  // ---------- 粒子 / 抖动 ----------
+  function burst(x, y, color, n) {
+    for (let i = 0; i < (n || 8); i++) {
+      const a = Math.random() * Math.PI * 2, sp = (40 + Math.random() * 220) * S;
+      particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color, r: (1.5 + Math.random() * 3) * S });
+    }
+  }
+
+  // ---------- 更新 ----------
+  function update(dt) {
+    if (state !== ST.PLAY) { updateParticles(dt); return; }
+    elapsed += dt;
+
+    if (!dead) {
+      // 物理
+      player.vy += G * S * dt;
+      if (hooked) {
+        // 轻微"荡秋千"助力，朝前进方向加速，手感更爽更宽容
+        player.vx += 40 * S * dt;
+      } else {
+        player.vx += 8 * S * dt; // 空中极小前推，防止失速
+      }
+      player.x += player.vx * dt;
+      player.y += player.vy * dt;
+
+      // 绳约束（钟摆）
+      if (hooked) {
+        let dx = player.x - hooked.x, dy = player.y - hooked.y;
+        let d = Math.hypot(dx, dy) || 1;
+        const nx = dx / d, ny = dy / d;
+        if (d > ropeLen) {
+          player.x = hooked.x + nx * ropeLen;
+          player.y = hooked.y + ny * ropeLen;
+          const vr = player.vx * nx + player.vy * ny;
+          if (vr > 0) { player.vx -= vr * nx; player.vy -= vr * ny; }
+        }
+      }
+      player.vx = Math.min(player.vx, 900 * S);
+
+      // 拖尾
+      trail.push({ x: player.x, y: player.y });
+      if (trail.length > 18) trail.shift();
+
+      // 灵魂珠收集
+      for (const o of orbs) {
+        if (o.got) continue;
+        if (Math.hypot(o.x - player.x, o.y - player.y) < 34 * S) {
+          o.got = true; combo++; comboTimer = 1.4;
+          bonus += 5 * Math.max(1, Math.floor(combo / 3) + 1);
+          shake = Math.min(shake + 3, 10);
+          beep(700 + combo * 30, 0.09, 'square', 0.09);
+          burst(o.x, o.y, '#ffd76a', 12);
+        }
+      }
+      if (comboTimer > 0) { comboTimer -= dt; if (comboTimer <= 0) combo = 0; }
+
+      // 分数 = 距离 + 灵魂珠加成
+      score = Math.floor(elapsedDist() / 24) + bonus;
+
+      // 死亡：掉出屏幕下方
+      if (player.y > DEATHY()) die();
+    } else {
+      deadTimer -= dt;
+      player.vy += G * S * dt;
+      player.x += player.vx * dt; player.y += player.vy * dt;
+      if (deadTimer <= 0) gameOver();
+    }
+
+    // 相机
+    const targetCam = player.x - W * 0.34;
+    cam += (targetCam - cam) * Math.min(1, dt * 8);
+    if (cam < 0) cam = 0;
+
+    ensureSpawn(player.x + W * 2);
+    // 清理
+    anchors = anchors.filter(a => a.x > cam - 200);
+    orbs = orbs.filter(o => o.x > cam - 200 && !(o.got && o.x < cam));
+
+    if (shake > 0) shake = Math.max(0, shake - dt * 30);
+    updateParticles(dt);
+
+    // HUD
+    document.getElementById('score').textContent = score;
+    const cEl = document.getElementById('combo');
+    if (combo >= 2 && comboTimer > 0) { cEl.classList.remove('hidden'); cEl.textContent = 'x' + combo; }
+    else cEl.classList.add('hidden');
+  }
+
+  function updateParticles(dt) {
+    for (const p of particles) {
+      p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 600 * S * dt; p.vx *= 0.96; p.life -= dt * 1.6;
+    }
+    particles = particles.filter(p => p.life > 0);
+  }
+
+  function die() {
+    if (dead) return;
+    dead = true; deadTimer = 0.7;
+    shake = 16; beep(140, 0.4, 'sawtooth', 0.16);
+    for (let i = 0; i < 30; i++) burst(player.x, player.y, '#8ff', 1);
+  }
+
+  function gameOver() {
+    state = ST.OVER;
+    const isNew = score > best;
+    if (isNew) { best = score; localStorage.setItem('soulswing_best', best); }
+    document.getElementById('finalScore').textContent = score;
+    document.getElementById('bestOver').textContent = best;
+    document.getElementById('bestHud').textContent = '最佳 ' + best;
+    document.getElementById('newBest').classList.toggle('hidden', !isNew);
+    showLayer('over');
+  }
+
+  // ---------- 渲染 ----------
+  function render() {
+    ctx.save();
+    // 抖动
+    if (shake > 0) ctx.translate((Math.random() - .5) * shake, (Math.random() - .5) * shake);
+
+    // 背景渐变
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0a0a1e'); g.addColorStop(0.5, '#13123a'); g.addColorStop(1, '#1d0f33');
+    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+
+    // 星空视差
+    for (const s of stars) {
+      const sx = ((s.x - cam * s.z) % (W + 40) + W + 40) % (W + 40) - 20;
+      ctx.globalAlpha = s.z;
+      ctx.fillStyle = '#bcd6ff';
+      ctx.fillRect(sx, s.y, s.s, s.s);
+    }
+    ctx.globalAlpha = 1;
+
+    ctx.translate(-cam, 0);
+
+    // 地平线雾（暗示深渊）
+    const fog = ctx.createLinearGradient(0, H * 0.75, 0, H);
+    fog.addColorStop(0, 'rgba(40,20,70,0)'); fog.addColorStop(1, 'rgba(80,30,120,.5)');
+    ctx.fillStyle = fog; ctx.fillRect(cam - 20, H * 0.75, W + 40, H * 0.25);
+
+    // 灵魂珠
+    for (const o of orbs) {
+      if (o.got) continue;
+      o.ph += 0.05;
+      const pulse = 1 + Math.sin(o.ph) * 0.15;
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(255,215,106,.18)';
+      ctx.arc(o.x, o.y, 22 * S * pulse, 0, 7);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = '#ffd76a';
+      ctx.shadowColor = '#ffd76a'; ctx.shadowBlur = 18;
+      ctx.arc(o.x, o.y, 8 * S, 0, 7);
+      ctx.fill(); ctx.shadowBlur = 0;
+    }
+
+    // 锚点
+    for (const a of anchors) {
+      a.pulse += 0.06;
+      const inRange = !dead && Math.hypot(a.x - player.x, a.y - player.y) <= MAXROPE() && a.y < player.y - 10 * S && a.x > player.x - 80 * S;
+      const col = a === hooked ? '#fff' : (inRange ? '#8ff' : '#46588a');
+      ctx.beginPath();
+      ctx.strokeStyle = col; ctx.lineWidth = 2.5 * S;
+      ctx.globalAlpha = inRange || a === hooked ? 1 : 0.6;
+      const rr = (10 + Math.sin(a.pulse) * 2) * S;
+      ctx.arc(a.x, a.y, rr, 0, 7); ctx.stroke();
+      ctx.beginPath(); ctx.fillStyle = col;
+      ctx.arc(a.x, a.y, 3.5 * S, 0, 7); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // 绳
+    if (hooked) {
+      ctx.beginPath();
+      const rg = ctx.createLinearGradient(hooked.x, hooked.y, player.x, player.y);
+      rg.addColorStop(0, '#8ff'); rg.addColorStop(1, '#fff');
+      ctx.strokeStyle = rg; ctx.lineWidth = 3 * S;
+      ctx.shadowColor = '#8ff'; ctx.shadowBlur = 10;
+      ctx.moveTo(hooked.x, hooked.y); ctx.lineTo(player.x, player.y); ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
+    // 拖尾
+    for (let i = 0; i < trail.length; i++) {
+      const t = trail[i], a = i / trail.length;
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(140,255,255,' + (a * 0.5) + ')';
+      ctx.arc(t.x, t.y, player.r * a * 0.9, 0, 7); ctx.fill();
+    }
+
+    // 玩家（灵魂）
+    if (!dead || Math.floor(deadTimer * 20) % 2 === 0) {
+      ctx.beginPath();
+      ctx.fillStyle = 'rgba(140,255,255,.25)';
+      ctx.arc(player.x, player.y, player.r * 2.2, 0, 7); ctx.fill();
+      ctx.beginPath();
+      ctx.fillStyle = '#eaffff';
+      ctx.shadowColor = '#8ff'; ctx.shadowBlur = 20;
+      ctx.arc(player.x, player.y, player.r, 0, 7); ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+
+    // 粒子
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  // ---------- 主循环 ----------
+  let last = performance.now();
+  function loop(now) {
+    let dt = (now - last) / 1000; last = now;
+    if (dt > 0.05) dt = 0.05;
+    update(dt);
+    render();
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
+
+  // ---------- UI ----------
+  function showLayer(id) {
+    for (const l of document.querySelectorAll('.layer')) {
+      if (l.id === id) { l.classList.remove('hidden'); requestAnimationFrame(() => l.classList.add('show')); }
+      else { l.classList.add('hidden'); l.classList.remove('show'); }
+    }
+    if (id === '') for (const l of document.querySelectorAll('.layer')) { l.classList.add('hidden'); l.classList.remove('show'); }
+  }
+  function startGame() {
+    document.getElementById('bestHud').textContent = '最佳 ' + best;
+    reset(); state = ST.PLAY; showLayer('');
+  }
+  document.getElementById('startBtn').onclick = () => { actx(); startGame(); };
+  document.getElementById('retryBtn').onclick = startGame;
+  document.getElementById('shareBtn').onclick = async () => {
+    const text = `我在《荡魂》里飞越了 ${score} 米！来挑战这个无跳跃荡绳跑酷 →`;
+    try {
+      if (navigator.share) await navigator.share({ title: '荡魂 Soul Swing', text });
+      else { await navigator.clipboard.writeText(text); alert('成绩已复制，去粘贴给朋友吧！'); }
+    } catch (e) {}
+  };
+  document.getElementById('bestHud').textContent = '最佳 ' + best;
+})();
+</script>
+</body>
+</html>

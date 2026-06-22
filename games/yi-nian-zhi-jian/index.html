@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>一念之间 · 一句话神明</title>
+<style>
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root{ --gold:#e8c87a; --gold2:#caa24e; --paper:#ece3cf; --ink:#1a1812; --dim:#9a9078; }
+  html,body{
+    height:100%; overflow:hidden; user-select:none;
+    font-family:"Songti SC","STSong","SimSun",-apple-system,"PingFang SC",serif;
+    color:var(--paper);
+    background:radial-gradient(130% 90% at 50% -20%, #2a2740 0%, #1a1726 45%, #0e0c16 100%);
+    display:flex; flex-direction:column; align-items:center;
+  }
+  body::before{ content:""; position:fixed; inset:0; pointer-events:none; opacity:.5;
+    background-image:radial-gradient(1px 1px at 20% 30%, rgba(255,255,255,.5) 0, transparent),
+      radial-gradient(1px 1px at 70% 20%, rgba(255,255,255,.4) 0, transparent),
+      radial-gradient(1px 1px at 40% 70%, rgba(255,255,255,.35) 0, transparent),
+      radial-gradient(1px 1px at 85% 55%, rgba(255,255,255,.45) 0, transparent),
+      radial-gradient(1px 1px at 55% 90%, rgba(255,255,255,.3) 0, transparent),
+      radial-gradient(1px 1px at 10% 80%, rgba(255,255,255,.4) 0, transparent); }
+  #app{ width:100%; max-width:460px; height:100%; display:flex; flex-direction:column; padding:8px 14px env(safe-area-inset-bottom,12px); position:relative; z-index:1; }
+
+  header{ display:flex; align-items:center; justify-content:space-between; padding:4px 2px 8px; }
+  .title{ font-size:19px; font-weight:900; letter-spacing:4px; color:var(--gold); }
+  #year{ font-size:13px; color:var(--dim); letter-spacing:1px; }
+  .tools{ display:flex; gap:8px; }
+  .ibtn{ width:34px; height:34px; border:1px solid rgba(232,200,122,.3); border-radius:9px;
+    background:rgba(232,200,122,.06); font-size:15px; cursor:pointer; color:var(--gold); }
+  .ibtn:active{ transform:scale(.92); }
+
+  /* 指标 */
+  #metrics{ display:grid; grid-template-columns:1fr 1fr; gap:7px 12px; padding:4px 2px 10px; }
+  .metric{ position:relative; }
+  .metric .top{ display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:3px; }
+  .metric .nm{ color:var(--paper); font-weight:700; letter-spacing:1px; }
+  .metric .val{ color:var(--dim); font-weight:800; }
+  .metric .track{ height:7px; background:rgba(255,255,255,.08); border-radius:5px; overflow:hidden; }
+  .metric .fill{ height:100%; width:50%; border-radius:5px; transition:width .6s cubic-bezier(.3,1,.4,1); }
+  .float{ position:absolute; right:0; top:-4px; font-size:13px; font-weight:900; opacity:0; }
+  .float.up{ color:#7fce9a; } .float.down{ color:#e0796a; }
+  .float.go{ animation:floatup 1.1s ease forwards; }
+  @keyframes floatup{ 0%{opacity:0; transform:translateY(6px)} 25%{opacity:1} 100%{opacity:0; transform:translateY(-16px)} }
+
+  /* 事件卡 */
+  #scene{ flex:1; display:flex; flex-direction:column; min-height:0; }
+  #sceneCard{
+    flex:1; min-height:0; overflow-y:auto; background:linear-gradient(180deg, rgba(40,36,58,.6), rgba(22,20,34,.6));
+    border:1px solid rgba(232,200,122,.22); border-radius:18px; padding:20px 18px; margin-bottom:12px;
+    box-shadow:inset 0 1px 0 rgba(255,255,255,.05); -webkit-overflow-scrolling:touch;
+  }
+  #sceneCard.fade{ animation:fade .5s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:translateY(0)} }
+  .scene-tag{ display:inline-block; font-size:12px; color:#1a1726; background:var(--gold); border-radius:8px; padding:2px 10px; font-weight:800; letter-spacing:2px; margin-bottom:12px; }
+  .scene-text{ font-size:17px; line-height:1.95; color:#f0e9d6; letter-spacing:.5px; }
+  .scene-reply{ margin-top:16px; padding-top:14px; border-top:1px dashed rgba(232,200,122,.3); font-size:15.5px; line-height:1.9; color:var(--gold); }
+  .scene-reply::before{ content:"⟶ "; opacity:.6; }
+
+  /* 旨意按钮 */
+  #choices{ display:flex; flex-direction:column; gap:8px; }
+  .choice{
+    width:100%; text-align:left; border:1px solid rgba(232,200,122,.32); border-radius:13px;
+    background:linear-gradient(180deg, rgba(232,200,122,.1), rgba(232,200,122,.03));
+    color:var(--paper); font-size:15.5px; font-weight:600; letter-spacing:.5px; padding:13px 16px; cursor:pointer;
+    font-family:inherit; position:relative; transition:transform .1s, background .2s;
+  }
+  .choice::before{ content:"「"; color:var(--gold2); } .choice::after{ content:"」"; color:var(--gold2); }
+  .choice:active{ transform:scale(.985); background:rgba(232,200,122,.18); }
+  .choice:disabled{ opacity:.35; }
+  #nextBtn{
+    width:100%; border:none; border-radius:13px; padding:14px; font-size:17px; font-weight:800; letter-spacing:3px;
+    cursor:pointer; color:#1a1726; font-family:inherit;
+    background:linear-gradient(180deg,var(--gold),var(--gold2)); box-shadow:0 4px 0 #93702c;
+  }
+  #nextBtn:active{ transform:translateY(3px); box-shadow:0 1px 0 #93702c; }
+  .hidden{ display:none !important; }
+
+  /* 弹窗 */
+  .overlay{ position:fixed; inset:0; z-index:99; display:flex; align-items:center; justify-content:center; padding:24px;
+    background:rgba(8,6,14,.7); backdrop-filter:blur(5px); }
+  .card{ background:linear-gradient(180deg,#26233a,#16142370); background:linear-gradient(180deg,#27243c,#181527);
+    border:1px solid rgba(232,200,122,.3); border-radius:22px; padding:26px 22px; max-width:350px; width:100%;
+    text-align:center; box-shadow:0 18px 50px rgba(0,0,0,.5); animation:pop .4s cubic-bezier(.3,1.4,.5,1); max-height:88vh; overflow-y:auto; }
+  @keyframes pop{ from{transform:scale(.85);opacity:0} to{transform:scale(1);opacity:1} }
+  .card h1{ font-size:25px; letter-spacing:5px; color:var(--gold); margin-bottom:8px; }
+  .card .big{ font-size:56px; line-height:1; margin-bottom:8px; }
+  .card .sub{ font-size:14.5px; color:#d8cfb8; line-height:1.85; margin-bottom:16px; }
+  .endline{ font-size:15px; color:#f0e9d6; line-height:2; background:rgba(0,0,0,.2); border-radius:14px; padding:14px 16px; margin-bottom:14px; text-align:left; }
+  .endstat{ font-size:14px; color:var(--gold); margin-bottom:16px; letter-spacing:1px; }
+  .hintbox{ background:rgba(232,200,122,.08); border-radius:14px; padding:13px 15px; font-size:13.5px; line-height:1.9; text-align:left; color:#d8cfb8; margin-bottom:18px; }
+  .hintbox b{ color:var(--gold); }
+  .btn{ display:block; width:100%; border:none; border-radius:13px; padding:13px; font-size:17px; font-weight:800; cursor:pointer;
+    margin-top:10px; color:#1a1726; letter-spacing:3px; font-family:inherit;
+    background:linear-gradient(180deg,var(--gold),var(--gold2)); box-shadow:0 4px 0 #93702c; }
+  .btn:active{ transform:translateY(3px); box-shadow:0 1px 0 #93702c; }
+  .btn.ghost{ background:transparent; border:1px solid rgba(232,200,122,.4); color:var(--gold); box-shadow:none; }
+  /* 结局图鉴 */
+  #endingList{ text-align:left; }
+  .erow{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid rgba(232,200,122,.12); font-size:14px; }
+  .erow .e{ font-size:22px; width:30px; text-align:center; }
+  .erow.lock{ color:var(--dim); } .erow.lock .e{ filter:grayscale(1) brightness(.6); }
+  .erow .nm{ font-weight:800; color:var(--gold); } .erow.lock .nm{ color:var(--dim); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="title">一念之间</div>
+    <div id="year">享国 第 1 年</div>
+    <div class="tools">
+      <button class="ibtn" id="codexBtn" title="结局图鉴">📜</button>
+      <button class="ibtn" id="muteBtn" title="静音">🔊</button>
+      <button class="ibtn" id="helpBtn" title="玩法">？</button>
+    </div>
+  </header>
+
+  <div id="metrics"></div>
+
+  <div id="scene">
+    <div id="sceneCard">
+      <span class="scene-tag" id="sceneTag">序</span>
+      <div class="scene-text" id="sceneText"></div>
+      <div class="scene-reply hidden" id="sceneReply"></div>
+    </div>
+    <div id="choices"></div>
+    <button id="nextBtn" class="hidden">下 一 年 →</button>
+  </div>
+</div>
+
+<!-- 开始 -->
+<div class="overlay" id="startOverlay">
+  <div class="card">
+    <div class="big">🌙</div>
+    <h1>一念之间</h1>
+    <div class="sub">你是这片土地无形的天意。<br>每一年，子民向你祈愿，<br>而你只能<b style="color:var(--gold)">降下一句话</b>。</div>
+    <div class="hintbox">
+      🗣️ 每年遇一事，从几句旨意中<b>择其一</b>降下<br>
+      ⚖️ 世界会照它自己的方式<b>领会</b>你的话<br>
+      📊 你的话牵动 黎民 · 信仰 · 仓廪 · 太平<br>
+      💀 任一根基崩塌，王朝便终；信仰过盛，亦成灾<br>
+      📜 撑过 <b>三十年</b>，方见盛世。不同活法，通向不同结局
+    </div>
+    <button class="btn" id="startBtn">降 下 第 一 念</button>
+  </div>
+</div>
+
+<!-- 结局 -->
+<div class="overlay hidden" id="endOverlay">
+  <div class="card">
+    <div class="big" id="endEmoji">🏯</div>
+    <h1 id="endName">太平盛世</h1>
+    <div class="endline" id="endLine"></div>
+    <div class="endstat" id="endStat"></div>
+    <button class="btn" id="endShare">📤 晒出我的天命</button>
+    <button class="btn ghost" id="endAgain">重开一局</button>
+  </div>
+</div>
+
+<!-- 图鉴 -->
+<div class="overlay hidden" id="codexOverlay">
+  <div class="card">
+    <h1 style="font-size:21px">结局图鉴</h1>
+    <div class="sub" id="codexCount" style="margin-bottom:10px"></div>
+    <div id="endingList"></div>
+    <button class="btn ghost" id="codexClose" style="margin-top:16px">返 回</button>
+  </div>
+</div>
+
+<script>
+/* ============ 指标 ============ */
+const METRICS = [
+  {k:'min', name:'黎民', emoji:'👥', color:'#5fae7e'},
+  {k:'fa',  name:'信仰', emoji:'🔥', color:'#d8694f'},
+  {k:'gr',  name:'仓廪', emoji:'🌾', color:'#d2a554'},
+  {k:'pe',  name:'太平', emoji:'☯️', color:'#6f9bd0'},
+];
+const clamp = v => Math.max(0, Math.min(100, Math.round(v)));
+
+/* ============ 普通事件池 ============ */
+// choice: {t:文案, fx:{min,fa,gr,pe}, r:后果}  或  {t, roll:()=>({fx,r})}
+const EVENTS = [
+  { tag:'旱', text:'久旱不雨，田地龟裂。老农跪在焦土上，向天祈求一场雨。', ch:[
+    {t:'降下甘霖', fx:{gr:14,fa:8}, r:'你拨云布雨，稻穗重新低垂。老农叩首三日，村口竖起你的第一座神像。'},
+    {t:'天意不可违', fx:{fa:-12,min:-8}, r:'天空依旧惨白。第七日起，再没有人抬头看天。'},
+    {t:'苦难即是恩典', fx:{fa:6,pe:-10}, r:'你说干旱是历练。有人信了，开始鞭笞自己，以求救赎。'},
+  ]},
+  { tag:'像', text:'村民要为你塑第一尊神像，问该是什么模样。', ch:[
+    {t:'慈眉善目', fx:{fa:5,min:10}, r:'孩子们不再怕你，在像前许下些天真的小愿。'},
+    {t:'怒目雷霆', fx:{fa:14,pe:-6,min:-5}, r:'无人敢在像前喧哗。秩序井然，也死气沉沉。'},
+    {t:'我无形无相', fx:{fa:-6,pe:6,min:4}, r:'他们困惑了，转而自己琢磨道理——这未必是坏事。'},
+  ]},
+  { tag:'寇', text:'邻村强人压境，壮丁们握紧锄头，问你是战是和。', ch:[
+    {t:'战！', roll:()=> Math.random()<0.55
+       ? {fx:{pe:10,gr:8,min:-6}, r:'村人浴血而战，竟将来犯者击退。缴获的粮草堆满谷仓，也添了几座新坟。'}
+       : {fx:{min:-15,pe:-12}, r:'锄头终究敌不过刀剑。村子折损惨重，焦土上久久不散硝烟。'} },
+    {t:'献上贡品', fx:{gr:-15,pe:10}, r:'你让村子奉上半年存粮，强人满意而归。村民保住了命，却空了肚子。'},
+    {t:'以我之名诅咒来犯者', roll:()=> Math.random()<0.5
+       ? {fx:{fa:16,pe:12}, r:'当夜，强人首领暴毙于营中。村民相信是你显灵，信仰如野火般蔓延。'}
+       : {fx:{fa:-18,min:-6}, r:'诅咒没有应验。强人大笑着踏平了半个村子，神威扫地。'} },
+  ]},
+  { tag:'疫', text:'一种怪病在村里蔓延，咳声夜夜不绝。', ch:[
+    {t:'赐下药草的启示', fx:{min:10,fa:10,gr:-6}, r:'你“托梦”指引草药。病渐止，村民称你为活命的神。'},
+    {t:'隔绝病者于村外', fx:{min:-12,pe:8}, r:'病情止住了。可那些被赶出去的人，再没有回来。'},
+    {t:'这是对不洁者的惩戒', fx:{fa:8,min:-10,pe:-6}, r:'人人自危，互相揭发“不洁”。病未尽，人心已先烂了。'},
+  ]},
+  { tag:'丰', text:'难得的丰收！谷仓堆得冒尖，村民笑问该如何庆祝。', ch:[
+    {t:'大摆筵席，与民同乐', fx:{gr:-8,min:12,pe:6}, r:'三日流水席，笑声传到十里外。这是村子最暖的一年。'},
+    {t:'囤积以备荒年', fx:{gr:12,min:-4}, r:'你让他们克制。谷仓满了，脸上的笑却淡了些。'},
+    {t:'余粮尽数供奉于我', fx:{fa:14,gr:-6,min:-4}, r:'最好的粮食堆到了你脚下。你高高在上，闻得到饭香。'},
+  ]},
+  { tag:'兆', text:'夜空裂开一道红光。村民惊恐，齐声问这是吉是凶。', ch:[
+    {t:'此乃降福之兆', fx:{fa:10,pe:6}, r:'人心大定。那道红光，成了你恩典的注脚。'},
+    {t:'大祸将至，速速忏悔', fx:{fa:12,pe:-10,gr:-4}, r:'全村惶惶，彻夜忏悔。虔诚是真的，恐惧也是真的。'},
+    {t:'不过一颗流星罢了', fx:{fa:-8,pe:4,min:4}, r:'你说得云淡风轻。有人松了口气，也有人开始怀疑你的神通。'},
+  ]},
+  { tag:'祭', text:'一名少女自愿投火为祭，说要做你的新娘。全村屏息看着你。', ch:[
+    {t:'我接受她的虔诚', fx:{fa:16,min:-8,pe:-4}, r:'她笑着走入火中。从此献祭成俗，年年都有人步她后尘。'},
+    {t:'神不需要活祭', fx:{fa:-6,min:12,pe:4}, r:'你制止了这场悲剧。多年后，那少女成了村里最好的医者。'},
+    {t:'让她去做更有用的事', fx:{min:6,gr:6}, r:'她去开垦了荒地。神迹没有发生，庄稼却实实在在地长了出来。'},
+  ]},
+  { tag:'讼', text:'两户人家为一头牛争执不下，闹到神像前请你裁断。', ch:[
+    {t:'牛归先到田者', fx:{pe:8}, r:'纠纷平息。被判输的那家，从此祭拜得格外勤。'},
+    {t:'杀牛分肉，各得一半', fx:{pe:4,gr:4,min:-4}, r:'牛是分了，两家却从此再不往来。'},
+    {t:'让他们摔跤定胜负', fx:{pe:-4,min:6}, r:'村民觉得有趣，纷纷效仿断案。纠纷少了，淤青多了。'},
+  ]},
+  { tag:'异', text:'一名游方僧人在村里传起了别的神，听者渐众。', ch:[
+    {t:'降下神迹震慑', fx:{fa:12,pe:-6,gr:-4}, r:'你显了灵。僧人连夜遁走，可有些种子已悄悄埋下。'},
+    {t:'容他与我并立', fx:{fa:-10,pe:8,min:4}, r:'两神并存，村子反倒更热闹了。你的香火，淡了一些。'},
+    {t:'让信徒自己赶走他', fx:{fa:6,pe:-8,min:-4}, r:'狂热的信徒动了手。僧人走了，村里也留下了戾气。'},
+  ]},
+  { tag:'问', text:'一个孩子仰头问你：“神啊，你也会死吗？”全村都等着你的回答。', ch:[
+    {t:'神永不消亡', fx:{fa:8}, r:'大人们如释重负。孩子似懂非懂地点了点头。'},
+    {t:'万物皆有终，我亦然', fx:{fa:-10,min:10,pe:4}, r:'人群沉默了。那一夜，许多人第一次认真地活着。'},
+    {t:'等你长大就懂了', fx:{fa:2,min:4}, r:'孩子嘟囔着跑开了。这个问题，他记了一辈子。'},
+  ]},
+  { tag:'金', text:'村民在河床挖出大量金砂，一夜暴富，却也开始争抢。', ch:[
+    {t:'金子当充公仓', fx:{gr:12,pe:-6}, r:'财富归了公，怨言归了私。谷仓富了，人心散了些。'},
+    {t:'各凭本事，多劳多得', fx:{gr:6,pe:-10,min:4}, r:'强者愈强，弱者愈弱。村子有了活力，也有了裂痕。'},
+    {t:'以我之名设市集', fx:{gr:10,fa:6,pe:4}, r:'金砂换来了往来商队。神庙前的市集，一天比一天热闹。'},
+  ]},
+  { tag:'民', text:'远方逃来一群难民，衣衫褴褛，跪求你的村庄收留。', ch:[
+    {t:'敞开村门', fx:{min:14,gr:-10,pe:-4}, r:'村子一下子壮大了，也一下子拥挤了。粮食，开始紧张。'},
+    {t:'闭门谢客', fx:{min:-6,pe:6,gr:2}, r:'村子守住了安宁。门外的哭声，飘了很远很远。'},
+    {t:'收青壮，遣老弱', fx:{min:6,gr:-4,pe:-2,fa:-4}, r:'村子添了劳力。那些被遣走之人临行的眼神，你记了很久。'},
+  ]},
+  { tag:'梦', text:'巫祝声称梦见你的旨意，要全村迁往深山。', ch:[
+    {t:'附和这则梦', fx:{fa:10,gr:-8,pe:-6}, r:'举村跋涉入山。途中艰险，可信仰因这场“神谕”空前高涨。'},
+    {t:'斥之为妄言', fx:{fa:-6,pe:8}, r:'你戳破了谎言。巫祝颜面扫地，秩序却安稳了下来。'},
+    {t:'沉默不语', roll:()=> Math.random()<0.5
+       ? {fx:{fa:6,pe:-4}, r:'你的沉默被当成默许。半村人迁走，半村人留下，从此分作两支。'}
+       : {fx:{fa:-8,min:-4}, r:'你的沉默被当成无能。巫祝的话，没人再当真，连你的话也是。'} },
+  ]},
+  { tag:'节', text:'村民想为你定一个节日，年年祭拜。', ch:[
+    {t:'定在丰收之时', fx:{fa:10,gr:-4,min:6}, r:'金秋祭神，载歌载舞。这是一年里最让人期待的日子。'},
+    {t:'定在最冷的寒夜', fx:{fa:12,pe:-4,min:-4}, r:'寒夜苦修成了风俗。虔诚的人冻得发抖，也无半句怨言。'},
+    {t:'我不需要节日', fx:{fa:-8,pe:4,gr:4}, r:'村民省下了祭祀的耗费，也省去了一份对你的念想。'},
+  ]},
+  { tag:'谣', text:'有人传言邻村的神更灵验，人心浮动。', ch:[
+    {t:'显灵以正视听', fx:{fa:10,gr:-4}, r:'你降了个小小神迹。流言止住，香火重旺。'},
+    {t:'任其自去', fx:{fa:-8,min:-2,pe:2}, r:'你不屑一顾。一些人，悄悄改拜了别的神。'},
+    {t:'散布对那神的恐惧', fx:{fa:6,pe:-8,min:-4}, r:'你让恐惧替你说话。信是保住了，村里却多了猜忌。'},
+  ]},
+  { tag:'律', text:'盗窃频发，村民请你定下惩治窃贼的规矩。', ch:[
+    {t:'断其一手以儆效尤', fx:{pe:12,min:-8,fa:4}, r:'再没人敢偷。集市上多了几个独臂人，和一片肃静。'},
+    {t:'罚其加倍偿还', fx:{pe:6,gr:4}, r:'宽严相济。偷盗少了，人心也还算服气。'},
+    {t:'宽恕，并探问缘由', fx:{pe:-4,min:10,fa:-2}, r:'你问，才知多是饥寒所迫。宽恕换来感激，也有人钻了空子。'},
+  ]},
+];
+
+/* ============ 危机事件（按指标触发，优先于普通事件）============ */
+const CRISES = [
+  { id:'kx', cond:s=> s.fa>=85, tag:'狂', text:'你的信徒已陷入癫狂，他们要焚毁一切“不够虔诚”之物，只等你一声令下。', ch:[
+    {t:'住手！', fx:{fa:-26,min:6,pe:12}, r:'你厉声喝止。狂热退潮，信仰大损，可村子保住了清明。'},
+    {t:'随他们去', fx:{fa:10,min:-22,pe:-22}, r:'火光冲天。以你之名，他们烧掉了房屋、邻人，和最后一点理智。'},
+  ]},
+  { id:'jh', cond:s=> s.gr<=15, tag:'荒', text:'谷仓见底，孩子开始啃树皮。绝望的村民围在神像下，等你开口。', ch:[
+    {t:'托梦指出最后的存粮', fx:{gr:18,fa:-6,min:2}, r:'你“梦示”了一处被遗忘的窖藏。村子，又能撑一阵了。'},
+    {t:'让他们以观音土充饥', fx:{min:-14,fa:4}, r:'白土下肚，能骗过饥饿，却骗不过肠胃。又添了几座坟。'},
+    {t:'易子而食，活下去要紧', fx:{min:-8,pe:-16,fa:8}, r:'村子活下来了。但有些东西，那一夜永远地死了。'},
+  ]},
+  { id:'bl', cond:s=> s.pe<=15, tag:'乱', text:'积怨终于爆发，村民举着火把涌向乡绅，也涌向你的神像。', ch:[
+    {t:'降下天威镇压', fx:{pe:18,min:-10,fa:6}, r:'雷霆之怒压下了暴乱。秩序回来了，踏着血泊回来的。'},
+    {t:'弃绅保民，顺应众意', fx:{pe:10,min:6,gr:-8,fa:-4}, r:'你“默许”了清算。乡绅倒台，民心稍平，元气大伤。'},
+    {t:'冷眼旁观', roll:()=> Math.random()<0.5
+       ? {fx:{pe:8,min:-6}, r:'一夜疯狂后，疲惫的村民自己散了。废墟里，秩序艰难地重生。'}
+       : {fx:{pe:-12,min:-12,fa:-8}, r:'无人主持的暴乱失了控。等火熄灭，村子已不成样子。'} },
+  ]},
+  { id:'kr', cond:s=> s.min>=92, tag:'盈', text:'人丁太过兴旺，土地与口粮已不堪重负，村子边缘开始有人挨饿。', ch:[
+    {t:'鼓励向外开拓新土', fx:{min:-8,gr:8,pe:4}, r:'一批青壮带着你的祝福远行拓荒。村子松了口气，也走散了亲人。'},
+    {t:'宣告“多子即是福”', fx:{fa:8,gr:-12,pe:-6}, r:'人越来越多，粥越来越稀。虔诚填不饱肚子。'},
+  ]},
+];
+
+/* ============ 结局 ============ */
+const ENDINGS = {
+  huangcun:{e:'🏚️', n:'荒村', line:'最后一缕炊烟也熄了。无人记得这里曾有座神像，更无人记得你。'},
+  yiwang:  {e:'🌫️', n:'遗忘', line:'他们终于找到了不靠神也能活的法子。香火断绝，你随风消散，连名字都没留下。'},
+  epiao:   {e:'💀', n:'饿殍遍野', line:'谷仓里只剩回声。你成了一尊看着子民饿死、却无能为力的泥像。'},
+  fanliao: {e:'🔥', n:'燔燎', line:'怒火吞没了村庄，也吞没了你的神像。灰烬里没有神，只有人。'},
+  kuangxin:{e:'😈', n:'狂信', line:'信徒以你之名焚尽世间一切。如今你的名字，是“恐惧”的另一种写法。'},
+  taiping: {e:'🏯', n:'太平盛世', line:'三十年风调雨顺，路不拾遗。子民安居乐业，几乎忘了你的存在——这正是神最大的功德。'},
+  yinshen: {e:'🕊️', n:'隐神', line:'你从未被高高供奉，却始终默默守护。无名无庙，是为隐神，最难修成的一种神。'},
+  changzhi:{e:'📜', n:'享国长久', line:'你陪这座村庄走过漫长岁月，看它从几间草棚，长成一座城郭。'},
+};
+const ENDING_ORDER = ['taiping','yinshen','changzhi','huangcun','yiwang','epiao','fanliao','kuangxin'];
+
+/* ============ 状态 ============ */
+const CODEX_KEY = 'ynzj_endings_v1';
+let unlockedEndings = new Set();
+try{ const s=JSON.parse(localStorage.getItem(CODEX_KEY)); if(Array.isArray(s)) s.forEach(x=>unlockedEndings.add(x)); }catch(e){}
+
+let state, recent, muted=false, ended=false, cur=null;
+
+function newGame(){
+  state = {min:60, fa:40, gr:55, pe:55, year:1, maxFaith:40};
+  recent = []; ended=false; cur=null;
+  document.getElementById('endOverlay').classList.add('hidden');
+  document.getElementById('startOverlay').classList.add('hidden');
+  renderMetrics(true);
+  nextEvent();
+}
+
+/* ============ 指标渲染 ============ */
+function renderMetrics(init){
+  const box = document.getElementById('metrics');
+  if(init){
+    box.innerHTML='';
+    METRICS.forEach(m=>{
+      const el=document.createElement('div'); el.className='metric'; el.dataset.k=m.k;
+      el.innerHTML=`<div class="top"><span class="nm">${m.emoji} ${m.name}</span><span class="val">0</span></div>
+        <div class="track"><div class="fill" style="background:${m.color}"></div></div>
+        <div class="float"></div>`;
+      box.appendChild(el);
+    });
+  }
+  METRICS.forEach(m=>{
+    const el=box.querySelector(`.metric[data-k="${m.k}"]`);
+    el.querySelector('.val').textContent = state[m.k];
+    el.querySelector('.fill').style.width = state[m.k]+'%';
+  });
+  document.getElementById('year').textContent = `享国 第 ${state.year} 年`;
+}
+function flashDelta(k, d){
+  if(!d) return;
+  const el=document.querySelector(`.metric[data-k="${k}"] .float`);
+  el.textContent=(d>0?'+':'')+d; el.className='float '+(d>0?'up':'down');
+  void el.offsetWidth; el.classList.add('go');
+}
+
+/* ============ 抽事件 ============ */
+function nextEvent(){
+  if(ended) return;
+  // 危机优先
+  const crisis = CRISES.find(c=> c.cond(state) && !recent.includes('C'+c.id));
+  let ev;
+  if(crisis){ ev = crisis; recent.push('C'+crisis.id); }
+  else{
+    let pool = EVENTS.map((e,i)=>i).filter(i=> !recent.includes(i));
+    if(pool.length===0){ recent=[]; pool=EVENTS.map((e,i)=>i); }
+    const idx = pool[Math.random()*pool.length|0];
+    ev = EVENTS[idx]; recent.push(idx);
+  }
+  if(recent.length>7) recent.shift();
+  cur = ev;
+  showScene(ev);
+}
+
+function showScene(ev){
+  const card=document.getElementById('sceneCard');
+  document.getElementById('sceneTag').textContent = ev.tag;
+  document.getElementById('sceneText').textContent = ev.text;
+  const reply=document.getElementById('sceneReply'); reply.classList.add('hidden'); reply.textContent='';
+  card.classList.remove('fade'); void card.offsetWidth; card.classList.add('fade');
+  card.scrollTop=0;
+  // 选项
+  const cbox=document.getElementById('choices'); cbox.innerHTML=''; cbox.classList.remove('hidden');
+  document.getElementById('nextBtn').classList.add('hidden');
+  ev.ch.forEach(c=>{
+    const b=document.createElement('button'); b.className='choice'; b.textContent=c.t;
+    b.onclick=()=> choose(c);
+    cbox.appendChild(b);
+  });
+  beep(330);
+}
+
+function choose(c){
+  if(ended) return;
+  const res = c.roll ? c.roll() : {fx:c.fx||{}, r:c.r||''};
+  // 应用后果
+  const before={min:state.min,fa:state.fa,gr:state.gr,pe:state.pe};
+  for(const k in res.fx){ state[k]=clamp(state[k]+res.fx[k]); }
+  state.maxFaith=Math.max(state.maxFaith, state.fa);
+  renderMetrics();
+  METRICS.forEach(m=> flashDelta(m.k, state[m.k]-before[m.k]));
+  beep(state.fa>before.fa?620:480);
+  // 显示后果
+  const reply=document.getElementById('sceneReply');
+  reply.textContent=res.r; reply.classList.remove('hidden');
+  document.getElementById('choices').classList.add('hidden');
+  // 结局检查
+  const end = checkEnding();
+  const nb=document.getElementById('nextBtn');
+  nb.classList.remove('hidden');
+  if(end){ nb.textContent='见 证 结 局 →'; nb.onclick=()=>showEnding(end); }
+  else{ nb.textContent='下 一 年 →'; nb.onclick=advanceYear; }
+  document.getElementById('sceneCard').scrollTop=9999;
+}
+
+function advanceYear(){
+  state.year++;
+  renderMetrics();
+  nextEvent();
+}
+
+/* ============ 结局判定 ============ */
+function checkEnding(){
+  if(state.min<=0) return 'huangcun';
+  if(state.fa<=0)  return 'yiwang';
+  if(state.gr<=0)  return 'epiao';
+  if(state.pe<=0)  return 'fanliao';
+  if(state.fa>=100) return 'kuangxin';
+  if(state.year>=30){
+    if(state.maxFaith<55) return 'yinshen';
+    if(state.min>40 && state.fa>40 && state.gr>40 && state.pe>40) return 'taiping';
+    return 'changzhi';
+  }
+  return null;
+}
+
+function showEnding(key){
+  ended=true; cur=null;
+  const e=ENDINGS[key];
+  const fresh = !unlockedEndings.has(key);
+  unlockedEndings.add(key);
+  try{ localStorage.setItem(CODEX_KEY, JSON.stringify([...unlockedEndings])); }catch(_){}
+  document.getElementById('endEmoji').textContent=e.e;
+  document.getElementById('endName').textContent=e.n + (fresh?' ✦':'');
+  document.getElementById('endLine').textContent=e.line;
+  document.getElementById('endStat').innerHTML=
+    `享国 <b>${state.year}</b> 年 · 已解锁结局 <b>${unlockedEndings.size}/${ENDING_ORDER.length}</b>` + (fresh?'<br><span style="color:#7fce9a">★ 发现新结局！</span>':'');
+  document.getElementById('endOverlay').classList.remove('hidden');
+  beep(key==='taiping'||key==='yinshen'?880:200);
+  if(key==='taiping'||key==='yinshen'){ setTimeout(()=>beep(1175),130); setTimeout(()=>beep(1568),260); }
+}
+
+/* ============ 图鉴 ============ */
+function showCodex(){
+  const list=document.getElementById('endingList'); list.innerHTML='';
+  ENDING_ORDER.forEach(key=>{
+    const e=ENDINGS[key]; const got=unlockedEndings.has(key);
+    const row=document.createElement('div'); row.className='erow'+(got?'':' lock');
+    row.innerHTML=`<span class="e">${e.e}</span><div><div class="nm">${got?e.n:'？？？'}</div>
+      <div style="font-size:12px;color:var(--dim)">${got?e.line.slice(0,18)+'…':'尚未解锁的天命'}</div></div>`;
+    list.appendChild(row);
+  });
+  document.getElementById('codexCount').textContent=`已窥见 ${unlockedEndings.size} / ${ENDING_ORDER.length} 种天命`;
+  document.getElementById('codexOverlay').classList.remove('hidden');
+}
+
+/* ============ 分享 ============ */
+function share(){
+  const name=document.getElementById('endName').textContent.replace(' ✦','');
+  const txt=`我在《一念之间》当了 ${state.year} 年的神，结局是「${name}」。\n一句话定一国命运，已解锁 ${unlockedEndings.size}/${ENDING_ORDER.length} 种结局。你来当当看？`;
+  if(navigator.share){ navigator.share({title:'一念之间', text:txt, url:location.href}).catch(()=>{}); }
+  else{ navigator.clipboard?.writeText(txt+' '+location.href); alert('天命已复制，去分享吧！\n\n'+txt); }
+}
+
+/* ============ 音效 ============ */
+let actx;
+function beep(freq){ if(muted) return;
+  try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(),g=actx.createGain();
+    o.frequency.value=freq; o.type='sine'; o.connect(g); g.connect(actx.destination);
+    g.gain.setValueAtTime(0.06,actx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001,actx.currentTime+0.25);
+    o.start(); o.stop(actx.currentTime+0.27);
+  }catch(e){}
+}
+
+/* ============ 绑定 ============ */
+document.getElementById('startBtn').onclick=newGame;
+document.getElementById('endAgain').onclick=newGame;
+document.getElementById('endShare').onclick=share;
+document.getElementById('helpBtn').onclick=()=>document.getElementById('startOverlay').classList.remove('hidden');
+document.getElementById('codexBtn').onclick=showCodex;
+document.getElementById('codexClose').onclick=()=>document.getElementById('codexOverlay').classList.add('hidden');
+document.getElementById('muteBtn').onclick=e=>{ muted=!muted; e.target.textContent=muted?'🔇':'🔊'; };
+
+renderMetrics(true);
+</script>
+</body>
+</html>

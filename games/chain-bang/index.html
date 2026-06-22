@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#190a24">
+<title>连锁一击 · Chain Bang</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#120618;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Helvetica,Arial,sans-serif;
+    user-select:none; -webkit-user-select:none; touch-action:none; color:#fff; }
+  #game { position:fixed; inset:0; display:block; }
+  .overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10;
+    background:radial-gradient(circle at 50% 30%, rgba(120,40,90,.45), rgba(12,4,18,.94)); }
+  .hidden { display:none !important; }
+  .logo { font-size:13vmin; font-weight:900; letter-spacing:.03em; line-height:1;
+    background:linear-gradient(180deg,#ffd36b,#ff7a3c 50%,#ff3d7f);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 24px rgba(255,120,60,.5)) drop-shadow(0 4px 0 rgba(0,0,0,.3)); }
+  .logo .b { display:inline-block; animation:boom 1.4s ease-in-out infinite; }
+  @keyframes boom { 0%,100%{transform:scale(1) rotate(0)} 45%{transform:scale(1.18) rotate(-6deg)} }
+  .sub { margin-top:1.6vmin; font-size:3.4vmin; color:#ffd9c0; opacity:.92; font-weight:600; }
+  .btn { margin-top:4vmin; padding:2.4vmin 8vmin; font-size:4.4vmin; font-weight:800; color:#fff;
+    border:none; border-radius:999px; cursor:pointer;
+    background:linear-gradient(180deg,#ff9a4a,#ff5a2c 60%,#ff2d6f);
+    box-shadow:0 6px 0 #c01c4e, 0 14px 34px rgba(255,80,60,.5); transition:transform .08s, box-shadow .08s; }
+  .btn:active { transform:translateY(4px); box-shadow:0 2px 0 #c01c4e; }
+  .btn.alt { background:linear-gradient(180deg,#7be0ff,#36a9ff 60%,#1f7ee0); box-shadow:0 6px 0 #115fb0, 0 14px 30px rgba(30,140,230,.45); }
+  .btn.alt:active { box-shadow:0 2px 0 #115fb0; }
+  .smallnote { margin-top:5vmin; font-size:2.7vmin; color:#e0b8c8; max-width:84vw; text-align:center; line-height:1.7; }
+
+  #levelSelect h2 { font-size:6vmin; font-weight:900; margin-bottom:3vmin; }
+  .grid { display:grid; grid-template-columns:repeat(4, 17vmin); gap:2.4vmin; }
+  @media (max-width:520px){ .grid{ grid-template-columns:repeat(3, 22vmin);} }
+  .cell { position:relative; aspect-ratio:1; border-radius:3.2vmin; cursor:pointer;
+    background:linear-gradient(180deg,#4a2040,#2a1028); border:.4vmin solid rgba(255,160,120,.25);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; box-shadow:0 6px 0 rgba(18,4,14,.6); transition:transform .08s; }
+  .cell:active{ transform:translateY(3px); }
+  .cell .num { font-size:6vmin; font-weight:900; color:#ffe0cc; }
+  .cell .stars { font-size:3vmin; margin-top:.4vmin; }
+  .cell.locked { filter:grayscale(.8) brightness(.55); cursor:default; }
+  .cell.locked .num::after{ content:"🔒"; }
+  .backbtn { position:fixed; top:3vmin; left:4vmin; font-size:4vmin; cursor:pointer; color:#ffd9c0; z-index:11;
+    background:rgba(40,16,32,.7); border-radius:999px; width:11vmin; height:11vmin; display:flex; align-items:center; justify-content:center; }
+
+  #resultModal .card { width:84vmin; max-width:480px; padding:6vmin 5vmin 5vmin; border-radius:5vmin;
+    background:linear-gradient(180deg,#46203c,#2a1024); text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.6); border:.4vmin solid rgba(255,170,130,.25); }
+  #resTitle { font-size:8vmin; font-weight:900; }
+  #resStars { font-size:13vmin; margin:1vmin 0 2vmin; letter-spacing:1vmin; }
+  #resScore { font-size:4.2vmin; color:#ffd9c0; font-weight:700; }
+  #resBest { font-size:3.2vmin; color:#e0b8c8; margin-top:1vmin; }
+  .rowbtns { display:flex; gap:3vmin; justify-content:center; margin-top:5vmin; }
+  .rowbtns .btn { margin-top:0; padding:2.2vmin 5vmin; font-size:3.8vmin; }
+
+  #coach { position:fixed; left:50%; transform:translateX(-50%); top:11vmin; z-index:9;
+    background:rgba(20,8,16,.85); color:#ffe8dc; padding:1.6vmin 4vmin; border-radius:999px; font-size:3.2vmin; font-weight:600;
+    pointer-events:none; opacity:0; transition:opacity .3s; border:1px solid rgba(255,170,130,.3); max-width:92vw; text-align:center; }
+  #coach.show { opacity:1; }
+  .credit { position:fixed; bottom:2.2vmin; font-size:2.4vmin; color:#9a6a80; z-index:11; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="titleScreen" class="overlay">
+  <div class="logo">连锁<span class="b">💥</span>一击</div>
+  <div class="sub">Chain Bang · 一次点火,引爆全场</div>
+  <button class="btn" id="playBtn">点燃引信</button>
+  <div class="smallnote">关卡是一台断了几环的鲁布·戈德堡机器<br><b>拖放你的炸药补全链路 → 瞄准点火 → 看连锁哗啦炸开</b><br>一次点火引爆所有气球即过关</div>
+  <div class="credit">H5Game · 单文件零依赖</div>
+</div>
+
+<div id="levelSelect" class="overlay hidden">
+  <div class="backbtn" id="lsBack">‹</div>
+  <h2>选择关卡</h2>
+  <div class="grid" id="levelGrid"></div>
+</div>
+
+<div id="resultModal" class="overlay hidden">
+  <div class="card">
+    <div id="resTitle">完美连锁!</div>
+    <div id="resStars">★★★</div>
+    <div id="resScore">得分 0</div>
+    <div id="resBest">最佳 0</div>
+    <div class="rowbtns">
+      <button class="btn alt" id="resRetry">再来一次</button>
+      <button class="btn" id="resNext">下一关</button>
+    </div>
+    <div class="rowbtns" style="margin-top:3vmin">
+      <button class="btn" id="resMenu" style="background:linear-gradient(180deg,#e0b8c8,#b888a0);box-shadow:0 6px 0 #8a5a72">关卡选择</button>
+    </div>
+  </div>
+</div>
+
+<div id="coach"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   连锁一击 · Chain Bang —— 一次点火引爆鲁布·戈德堡连锁
+   核心：拖放炸药补全断裂的连锁机器,瞄准点火,观赏连锁清空全场。
+   连锁用"激活事件队列"传播(确定性·可预判),非刚体物理。零依赖单文件。
+   世界 1280x800 等比 contain 缩放,全局可见以便规划。
+   ========================================================================= */
+
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+let DPR=Math.min(window.devicePixelRatio||1,2);
+const WORLD_W=1280, WORLD_H=800;
+let scale=1, offX=0, offY=0;
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  const w=window.innerWidth,h=window.innerHeight;
+  canvas.width=Math.floor(w*DPR); canvas.height=Math.floor(h*DPR);
+  canvas.style.width=w+'px'; canvas.style.height=h+'px';
+  scale=Math.min(w/WORLD_W,h/WORLD_H); offX=(w-WORLD_W*scale)/2; offY=(h-WORLD_H*scale)/2;
+}
+window.addEventListener('resize',resize); resize();
+
+//=========================== 音效 ===========================
+const Audio_=(()=>{
+  let ac=null,master=null,muted=false;
+  function ensure(){ if(ac) return; try{ ac=new (window.AudioContext||window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=0.5; master.connect(ac.destination);}catch(e){ac=null;} }
+  function tone(f,d,type='sine',v=0.4,slide=null){ if(!ac||muted) return; const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();
+    o.type=type;o.frequency.setValueAtTime(f,t); if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(1,slide),t+d);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(v,t+0.008);g.gain.exponentialRampToValueAtTime(0.0001,t+d);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+d+0.02); }
+  function noise(d,v=0.4,hp=300){ if(!ac||muted) return; const t=ac.currentTime,n=Math.floor(ac.sampleRate*d);
+    const b=ac.createBuffer(1,n,ac.sampleRate),dd=b.getChannelData(0); for(let i=0;i<n;i++)dd[i]=(Math.random()*2-1)*(1-i/n);
+    const s=ac.createBufferSource();s.buffer=b; const f=ac.createBiquadFilter();f.type='highpass';f.frequency.value=hp;
+    const g=ac.createGain();g.gain.value=v;g.gain.exponentialRampToValueAtTime(0.0001,t+d); s.connect(f);f.connect(g);g.connect(master);s.start(t); }
+  const S={
+    fire(){ ensure(); tone(200,0.2,'sawtooth',0.3,720); },
+    bomb(n){ ensure(); noise(0.3,0.5,150); tone(110+n*6,0.32,'sawtooth',0.4,40); },
+    pop(n){ ensure(); tone(500+n*40,0.12,'triangle',0.4,1100+n*60); tone(900,0.08,'sine',0.2,1500); },
+    firework(){ ensure(); tone(300,0.15,'sine',0.25,1600); noise(0.12,0.2,1200); },
+    domino(){ ensure(); tone(220,0.06,'square',0.3,160); },
+    rocket(){ ensure(); tone(420,0.25,'sawtooth',0.3,180); noise(0.2,0.15,800); },
+    win(){ ensure(); [523,659,784,1047,1319,1568].forEach((f,i)=>setTimeout(()=>tone(f,0.3,'triangle',0.4),i*90)); },
+    perfect(){ ensure(); [659,880,1319].forEach((f,i)=>setTimeout(()=>tone(f,0.4,'triangle',0.45),i*120)); },
+    lose(){ ensure(); [330,262,196].forEach((f,i)=>setTimeout(()=>tone(f,0.3,'sawtooth',0.3),i*140)); },
+    place(){ ensure(); tone(480,0.07,'sine',0.25,700); },
+    click(){ ensure(); tone(700,0.05,'square',0.22,920); },
+  };
+  S.toggleMute=()=>{muted=!muted;return muted;}; S.isMuted=()=>muted;
+  S.resume=()=>{ ensure(); if(ac&&ac.state==='suspended')ac.resume(); };
+  return S;
+})();
+
+//=========================== 工具 ===========================
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=(a,b)=>a+Math.random()*(b-a);
+const len=(x,y)=>Math.hypot(x,y);
+
+//=========================== 调参 ===========================
+const IGNITER={x:110,y:400};
+const SPARK_R=10, MAX_PULL=170, MAX_SPEED=900, SPARK_G=520;
+const BOMB_R=130, FW_R=210, DOMINO_R=120, BALLOON_R=22, NODE_R=24;
+const PROP_DELAY=0.13;           // 连锁传播延迟(秒) → 观赏节奏
+const SETTLE_AFTER=0.7;          // 最后激活后多久判定
+
+//=========================== 关卡 ===========================
+// nodes 元件: t in bomb/firework/domino/rocket/balloon ; dir(rocket弧度)
+// place: 玩家可放置炸药数
+const LEVELS=[
+  { name:"第一串", place:0, star:[900,1800,2800],
+    coach:"瞄准最左的炸药点火,看连锁自己炸下去",
+    nodes:[ {x:420,y:400,t:'bomb'}, {x:620,y:400,t:'bomb'}, {x:820,y:400,t:'bomb'},
+            {x:520,y:300,t:'balloon'},{x:720,y:300,t:'balloon'},{x:620,y:520,t:'balloon'},{x:820,y:280,t:'balloon'} ] },
+
+  { name:"补一环", place:1, star:[1100,2200,3400],
+    coach:"链路断了!拖你的炸药(待命区)架桥,再点火",
+    nodes:[ {x:380,y:400,t:'bomb'}, {x:560,y:400,t:'bomb'},
+            {x:960,y:400,t:'bomb'}, {x:1100,y:400,t:'bomb'},
+            {x:480,y:300,t:'balloon'},{x:1020,y:300,t:'balloon'},{x:1040,y:520,t:'balloon'},{x:560,y:520,t:'balloon'} ] },
+
+  { name:"烟花绽放", place:1, star:[1400,2800,4200],
+    coach:"烟花会向四周射出火花,覆盖范围更大",
+    nodes:[ {x:400,y:400,t:'bomb'}, {x:680,y:400,t:'firework'},
+            {x:560,y:240,t:'balloon'},{x:800,y:240,t:'balloon'},{x:680,y:560,t:'balloon'},
+            {x:920,y:380,t:'balloon'},{x:520,y:560,t:'balloon'},{x:980,y:560,t:'balloon'} ] },
+
+  { name:"多米诺", place:1, star:[1500,3000,4600],
+    coach:"多米诺只推倒最近的一个,排好顺序很关键",
+    nodes:[ {x:380,y:400,t:'bomb'}, {x:540,y:400,t:'domino'},{x:680,y:400,t:'domino'},{x:820,y:400,t:'domino'},{x:960,y:400,t:'domino'},
+            {x:540,y:300,t:'balloon'},{x:680,y:300,t:'balloon'},{x:820,y:300,t:'balloon'},{x:960,y:300,t:'balloon'},{x:1080,y:400,t:'balloon'} ] },
+
+  { name:"火箭跨越", place:1, star:[1700,3400,5200],
+    coach:"火箭朝箭头方向飞出,跨越鸿沟点燃远端",
+    nodes:[ {x:360,y:400,t:'bomb'}, {x:520,y:400,t:'rocket',dir:0},
+            {x:1000,y:400,t:'bomb'}, {x:1140,y:400,t:'bomb'},
+            {x:480,y:280,t:'balloon'},{x:1040,y:280,t:'balloon'},{x:1080,y:520,t:'balloon'},{x:1000,y:560,t:'balloon'} ] },
+
+  { name:"分叉链", place:2, star:[2000,4000,6000],
+    coach:"一点火,两条链同时炸开",
+    nodes:[ {x:400,y:400,t:'firework'},
+            {x:600,y:240,t:'bomb'},{x:760,y:200,t:'bomb'},
+            {x:600,y:560,t:'bomb'},{x:760,y:600,t:'bomb'},
+            {x:760,y:120,t:'balloon'},{x:900,y:200,t:'balloon'},
+            {x:760,y:680,t:'balloon'},{x:900,y:600,t:'balloon'},
+            {x:1020,y:400,t:'balloon'},{x:520,y:400,t:'balloon'} ] },
+
+  { name:"环形连锁", place:2, star:[2300,4600,7000],
+    coach:"沿环形布炸药,让连锁绕一整圈",
+    nodes:[ {x:380,y:400,t:'bomb'},
+            {x:560,y:240,t:'bomb'},{x:780,y:200,t:'bomb'},{x:960,y:320,t:'bomb'},{x:960,y:520,t:'bomb'},{x:780,y:600,t:'bomb'},{x:560,y:560,t:'bomb'},
+            {x:670,y:140,t:'balloon'},{x:880,y:230,t:'balloon'},{x:1040,y:420,t:'balloon'},{x:880,y:580,t:'balloon'},{x:670,y:660,t:'balloon'},{x:470,y:480,t:'balloon'} ] },
+
+  { name:"烟花火箭", place:2, star:[2600,5200,7800],
+    coach:"烟花点火箭,火箭再点烟花——接力跨场",
+    nodes:[ {x:360,y:400,t:'firework'}, {x:560,y:300,t:'rocket',dir:-0.5}, {x:560,y:500,t:'rocket',dir:0.5},
+            {x:980,y:200,t:'firework'}, {x:980,y:600,t:'firework'},
+            {x:1080,y:140,t:'balloon'},{x:880,y:200,t:'balloon'},{x:1080,y:660,t:'balloon'},{x:880,y:600,t:'balloon'},{x:740,y:400,t:'balloon'},{x:1140,y:400,t:'balloon'} ] },
+
+  { name:"断桥群岛", place:2, star:[2900,5800,8800],
+    coach:"三座孤岛,用炸药与火箭把它们连起来",
+    nodes:[ {x:340,y:400,t:'bomb'}, {x:480,y:400,t:'rocket',dir:0},
+            {x:760,y:260,t:'firework'}, {x:760,y:540,t:'firework'},
+            {x:1080,y:400,t:'bomb'},
+            {x:680,y:180,t:'balloon'},{x:840,y:180,t:'balloon'},{x:680,y:620,t:'balloon'},{x:840,y:620,t:'balloon'},
+            {x:1080,y:280,t:'balloon'},{x:1080,y:520,t:'balloon'},{x:1160,y:400,t:'balloon'} ] },
+
+  { name:"多米诺迷阵", place:2, star:[3200,6400,9600],
+    coach:"多米诺 + 炸药 + 烟花,排好这条长龙",
+    nodes:[ {x:360,y:400,t:'bomb'},{x:500,y:400,t:'domino'},{x:620,y:400,t:'domino'},{x:740,y:400,t:'firework'},
+            {x:740,y:240,t:'domino'},{x:860,y:200,t:'domino'},{x:980,y:240,t:'bomb'},
+            {x:740,y:560,t:'domino'},{x:860,y:600,t:'domino'},{x:980,y:560,t:'bomb'},
+            {x:980,y:120,t:'balloon'},{x:1100,y:240,t:'balloon'},{x:980,y:680,t:'balloon'},{x:1100,y:560,t:'balloon'},{x:560,y:300,t:'balloon'},{x:560,y:500,t:'balloon'} ] },
+
+  { name:"烟火盛典", place:3, star:[3800,7600,11400],
+    coach:"所有元件齐上阵,策划一场盛大连锁",
+    nodes:[ {x:360,y:400,t:'firework'},
+            {x:580,y:240,t:'rocket',dir:-0.3},{x:580,y:560,t:'rocket',dir:0.3},
+            {x:840,y:160,t:'bomb'},{x:840,y:640,t:'bomb'},{x:840,y:400,t:'firework'},
+            {x:1080,y:300,t:'bomb'},{x:1080,y:500,t:'bomb'},
+            {x:760,y:120,t:'balloon'},{x:960,y:120,t:'balloon'},{x:760,y:680,t:'balloon'},{x:960,y:680,t:'balloon'},
+            {x:1160,y:300,t:'balloon'},{x:1160,y:500,t:'balloon'},{x:700,y:400,t:'balloon'},{x:520,y:400,t:'balloon'} ] },
+
+  { name:"终极连锁", place:3, star:[4800,9600,15000],
+    coach:"最长的一条龙——证明你是连锁大师!",
+    nodes:[ {x:340,y:400,t:'bomb'},{x:480,y:300,t:'firework'},{x:480,y:500,t:'firework'},
+            {x:680,y:180,t:'rocket',dir:0.2},{x:680,y:620,t:'rocket',dir:-0.2},
+            {x:900,y:260,t:'bomb'},{x:900,y:540,t:'bomb'},{x:760,y:400,t:'domino'},{x:900,y:400,t:'firework'},
+            {x:1120,y:300,t:'bomb'},{x:1120,y:500,t:'bomb'},
+            {x:620,y:120,t:'balloon'},{x:1020,y:160,t:'balloon'},{x:620,y:680,t:'balloon'},{x:1020,y:640,t:'balloon'},
+            {x:1180,y:400,t:'balloon'},{x:1020,y:400,t:'balloon'},{x:560,y:400,t:'balloon'},{x:780,y:240,t:'balloon'},{x:780,y:560,t:'balloon'} ] },
+];
+
+//=========================== 存档 ===========================
+const SAVE_KEY='chainbang_save_v1';
+let save={stars:{},best:{}};
+try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(s) save=s; }catch(e){}
+function persist(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
+function levelUnlocked(i){ return i===0 || (save.stars[i-1]||0)>=1; }
+
+//=========================== 状态 ===========================
+const ST={ MENU:0, AIM:1, FIRE:2, CHAIN:3, OVER:4 };
+let state=ST.MENU;
+let curLevel=0, level=null;
+let nodes=[];                 // 所有元件+气球(+玩家炸药)
+let placedBombs=[];           // 玩家炸药(也加入 nodes)
+let spark=null;               // 点火火花弹
+let rockets=[];               // 飞行火箭
+let pending=[];               // 连锁事件队列 {node,time}
+let links=[];                 // 连锁连线 FX
+let chainT=0, chainCount=0, lastActT=0;
+let score=0, fired=false;
+let particles=[], popups=[], stars=[], confetti=[];
+let shake=0, coachTimer=0, resultPending=false;
+let timeScale=1, timeScaleTarget=1;
+let drag=null, aimVec=null;
+
+//=========================== 装载 ===========================
+function loadLevel(i){
+  curLevel=i; level=LEVELS[i];
+  nodes=level.nodes.map(n=>({...n, r:n.t==='balloon'?BALLOON_R:NODE_R, triggered:false, dead:false, flash:0, fall:0, hue:rand(0,360)}));
+  placedBombs=[];
+  for(let p=0;p<level.place;p++){ const b={x:IGNITER.x+60, y:230 - p*64, t:'bomb', r:NODE_R, triggered:false, dead:false, flash:0, player:true, parked:true}; placedBombs.push(b); nodes.push(b); }
+  spark=null; rockets=[]; pending=[]; links=[]; particles=[]; popups=[]; confetti=[];
+  chainT=0; chainCount=0; lastActT=0; score=0; fired=false; resultPending=false;
+  shake=0; timeScale=1; timeScaleTarget=1; drag=null; aimVec=null;
+  buildStarfield();
+  state=ST.AIM;
+  showCoach(level.coach,3600);
+}
+function buildStarfield(){ stars=[]; for(let i=0;i<70;i++) stars.push({x:rand(0,WORLD_W),y:rand(0,WORLD_H),r:rand(0.4,1.6),tw:rand(0,6)}); }
+
+const coachEl=document.getElementById('coach');
+function showCoach(t,ms=2800){ coachEl.textContent=t; coachEl.classList.add('show'); coachTimer=ms/1000; }
+
+//=========================== 输入（放炸药 + 瞄准点火）===========================
+function screenToWorld(px,py){ return {x:(px-offX)/scale, y:(py-offY)/scale}; }
+function onDown(px,py){
+  Audio_.resume();
+  if(state!==ST.AIM) return;
+  const w=screenToWorld(px,py);
+  for(const b of placedBombs){ if(!b.triggered && len(w.x-b.x,w.y-b.y) < b.r+22){ drag={type:'bomb',bomb:b}; return; } }
+  drag={type:'aim'}; setAim(w);
+}
+function onMove(px,py){
+  if(!drag) return; const w=screenToWorld(px,py);
+  if(drag.type==='bomb'){ drag.bomb.x=clamp(w.x,30,WORLD_W-30); drag.bomb.y=clamp(w.y,30,WORLD_H-30); drag.bomb.parked=false; }
+  else setAim(w);
+}
+function onUp(px,py){
+  if(!drag) return;
+  if(drag.type==='aim') fire();
+  else Audio_.place();
+  drag=null;
+}
+function setAim(w){
+  let dx=IGNITER.x-w.x, dy=IGNITER.y-w.y; const d=len(dx,dy);
+  if(d<10){ aimVec=null; return; }
+  const pull=Math.min(d,MAX_PULL), nx=dx/d, ny=dy/d, speed=(pull/MAX_PULL)*MAX_SPEED;
+  aimVec={vx:nx*speed, vy:ny*speed, pull};
+}
+function fire(){
+  if(!aimVec) return;
+  spark={x:IGNITER.x, y:IGNITER.y, vx:aimVec.vx, vy:aimVec.vy, life:0};
+  state=ST.FIRE; fired=true; aimVec=null;
+  Audio_.fire();
+}
+
+// 瞄准预测虚线
+function predictSpark(){
+  if(!aimVec) return null;
+  let x=IGNITER.x,y=IGNITER.y,vx=aimVec.vx,vy=aimVec.vy; const pts=[];
+  for(let i=0;i<60;i++){ vy+=SPARK_G*0.02; x+=vx*0.02; y+=vy*0.02; pts.push({x,y});
+    if(x<0||x>WORLD_W||y>WORLD_H) break;
+    for(const n of nodes){ if(!n.triggered && !n.parked && len(x-n.x,y-n.y)<n.r+SPARK_R) return {pts,hit:n}; }
+  }
+  return {pts,hit:null};
+}
+
+//=========================== 火花弹飞行 ===========================
+function stepSpark(dt){
+  if(!spark) return;
+  let steps=4; const sdt=dt/steps;
+  for(let s=0;s<steps;s++){
+    spark.vy+=SPARK_G*sdt; spark.x+=spark.vx*sdt; spark.y+=spark.vy*sdt; spark.life+=sdt;
+    particles.push({x:spark.x,y:spark.y,vx:rand(-30,30),vy:rand(-30,30),life:0.3,t:0,color:'#ffd36b',size:rand(2,4),kind:'spark'});
+    for(const n of nodes){
+      if(n.triggered||n.parked) continue;
+      if(len(spark.x-n.x,spark.y-n.y) < n.r+SPARK_R){
+        igniteChain(n); spark=null; return;
+      }
+    }
+    if(spark.x<-20||spark.x>WORLD_W+20||spark.y>WORLD_H+20){ spark=null; missFire(); return; }
+  }
+}
+function missFire(){ // 没点着任何东西 → 失败
+  state=ST.OVER; setTimeout(()=>loseRound(),300);
+}
+
+//=========================== 连锁系统（确定性激活传播）===========================
+function igniteChain(node){
+  state=ST.CHAIN; chainT=0; chainCount=0; lastActT=0; pending=[];
+  enqueue(node, 0);
+}
+function enqueue(node, atT){ if(node.triggered||node.dead) return; pending.push({node, time:atT}); }
+
+function processChain(dt){
+  chainT+=dt;
+  // 触发到点的事件
+  for(let i=pending.length-1;i>=0;i--){
+    if(chainT >= pending[i].time){ const n=pending[i].node; pending.splice(i,1); activate(n); }
+  }
+  // 火箭飞行
+  for(let i=rockets.length-1;i>=0;i--){
+    const r=rockets[i]; let steps=4,sdt=dt/steps; let hit=false;
+    for(let s=0;s<steps;s++){
+      r.x+=r.vx*sdt; r.y+=r.vy*sdt; r.life+=sdt;
+      particles.push({x:r.x,y:r.y,vx:rand(-40,40),vy:rand(-40,40),life:0.3,t:0,color:'#ff9a4a',size:rand(2,5),kind:'spark'});
+      for(const n of nodes){ if(n.triggered||n.parked) continue;
+        if(len(r.x-n.x,r.y-n.y)<n.r+8){ enqueue(n,chainT); hit=true; break; } }
+      if(hit) break;
+      if(r.x<-30||r.x>WORLD_W+30||r.y<-30||r.y>WORLD_H+30){ hit=true; break; }
+    }
+    if(hit||r.life>3) rockets.splice(i,1);
+  }
+  // 结束判定
+  if(pending.length===0 && rockets.length===0 && chainT-lastActT>SETTLE_AFTER && state===ST.CHAIN){
+    settleChain();
+  }
+}
+
+function activate(n){
+  if(n.triggered||n.dead) return;
+  n.triggered=true; n.flash=0.35; chainCount++; lastActT=chainT;
+  doShake(Math.min(3+chainCount*0.25, 14));
+  if(n.t==='balloon'){
+    n.dead=true;
+    const v=Math.round(100*(1+chainCount*0.12));
+    score+=v; Audio_.pop(chainCount);
+    floatText(n.x,n.y-18,'+'+v, chainCount>=8?'#ff6bd0':'#ffe066', clamp(0.9+chainCount*0.04,0.9,1.6));
+    burstBalloon(n);
+    // 气球也能小范围引爆相邻气球(连锁更顺)
+    propagate(n, 78, 99, PROP_DELAY*0.6, true);
+    return;
+  }
+  if(n.t==='bomb'){ Audio_.bomb(chainCount); bombFX(n); propagate(n, BOMB_R, 99, PROP_DELAY); }
+  else if(n.t==='firework'){ Audio_.firework(); fireworkFX(n); propagate(n, FW_R, 5, PROP_DELAY*1.3); }
+  else if(n.t==='domino'){ Audio_.domino(); n.fall=0.001; propagate(n, DOMINO_R, 1, PROP_DELAY*0.8); }
+  else if(n.t==='rocket'){ Audio_.rocket(); const a=n.dir||0; rockets.push({x:n.x,y:n.y,vx:Math.cos(a)*620,vy:Math.sin(a)*620,life:0}); rocketFX(n); }
+}
+
+// 波及范围内 k 个最近未触发节点
+function propagate(src, R, k, delay, balloonsOnly){
+  const cand=[];
+  for(const n of nodes){
+    if(n.triggered||n.dead||n.parked||n===src) continue;
+    if(balloonsOnly && n.t!=='balloon') continue;
+    const d=len(n.x-src.x,n.y-src.y);
+    if(d < R+n.r) cand.push({n,d});
+  }
+  cand.sort((a,b)=>a.d-b.d);
+  for(let i=0;i<Math.min(k,cand.length);i++){
+    const tgt=cand[i].n;
+    enqueue(tgt, chainT + delay + i*0.02);
+    links.push({x1:src.x,y1:src.y,x2:tgt.x,y2:tgt.y,life:0,max:0.4,color:src.t==='firework'?'#ffb14a':'#ff6b4a'});
+  }
+}
+
+function settleChain(){
+  const remain=nodes.filter(n=>n.t==='balloon' && !n.dead).length;
+  if(remain===0){ winRound(); }
+  else { state=ST.OVER; setTimeout(()=>loseRound(),400); }
+}
+
+//=========================== 视觉效果 ===========================
+function bombFX(n){ spawnRing(n.x,n.y,'#ff7a3c',BOMB_R); for(let i=0;i<22;i++) spawnSpark(n.x,n.y,i%2?'#ffd36b':'#ff5a2c',360); doShake(6); }
+function fireworkFX(n){ for(let i=0;i<26;i++){ const a=i/26*Math.PI*2; particles.push({x:n.x,y:n.y,vx:Math.cos(a)*rand(200,420),vy:Math.sin(a)*rand(200,420),life:rand(0.5,0.9),t:0,color:`hsl(${rand(0,60)},100%,60%)`,size:rand(2,4),kind:'spark'}); } spawnRing(n.x,n.y,'#ffd36b',FW_R*0.7); }
+function rocketFX(n){ for(let i=0;i<8;i++) spawnSpark(n.x,n.y,'#ff9a4a',200); }
+function burstBalloon(n){ for(let i=0;i<14;i++) particles.push({x:n.x,y:n.y,vx:rand(-260,260),vy:rand(-300,120),g:600,life:rand(0.5,0.9),t:0,color:`hsl(${n.hue},90%,62%)`,size:rand(3,7),kind:'box',rot:rand(0,6),vr:rand(-10,10)}); spawnRing(n.x,n.y,`hsl(${n.hue},90%,65%)`,40); }
+function spawnSpark(x,y,c,sp){ const a=rand(0,Math.PI*2),s=rand(sp*0.4,sp); particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,life:rand(0.3,0.6),t:0,color:c,size:rand(2,5),kind:'spark'}); }
+function spawnRing(x,y,c,R){ particles.push({x,y,r:6,vr:(R||120)/0.4,life:0.4,t:0,color:c,kind:'ring'}); }
+function floatText(x,y,text,color,sc=1){ popups.push({x,y,text,color,life:1.0,t:0,scale:sc}); }
+function doShake(v){ shake=Math.min(shake+v,20); }
+function spawnConfetti(){ for(let i=0;i<120;i++) confetti.push({x:rand(0,WORLD_W),y:rand(-200,0),vx:rand(-40,40),vy:rand(120,320),life:rand(2,3.5),t:0,color:`hsl(${rand(0,360)},90%,60%)`,size:rand(4,9),rot:rand(0,6),vr:rand(-6,6)}); }
+
+function updateParticles(dt){
+  for(const p of particles){ p.t+=dt; if(p.kind==='ring') p.r+=p.vr*dt; else { if(p.g)p.vy+=p.g*dt; p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.vr)p.rot+=p.vr*dt; p.vx*=0.95; p.vy*=0.95; } }
+  particles=particles.filter(p=>p.t<p.life);
+  for(const p of popups){ p.t+=dt; p.y-=30*dt; } popups=popups.filter(p=>p.t<p.life);
+  for(const l of links){ l.life+=dt; } links=links.filter(l=>l.life<l.max);
+  for(const c of confetti){ c.t+=dt; c.x+=c.vx*dt; c.y+=c.vy*dt; c.rot+=c.vr*dt; } confetti=confetti.filter(c=>c.t<c.life);
+  for(const n of nodes){ if(n.flash>0) n.flash-=dt; if(n.fall>0) n.fall=Math.min(n.fall+dt*4,1); }
+}
+
+//=========================== 结算 ===========================
+function winRound(){
+  if(resultPending) return; resultPending=true;
+  const allChained = chainCount;
+  const perfect = nodes.filter(n=>n.t==='balloon').length>0; // 全清才会到这
+  // 奖励
+  const unused = placedBombs.filter(b=>!b.triggered).length;
+  const bonus = unused*500 + chainCount*60;
+  score+=bonus;
+  state=ST.OVER;
+  timeScaleTarget=0.35; setTimeout(()=>timeScaleTarget=1,500);
+  spawnConfetti(); Audio_.perfect(); setTimeout(()=>Audio_.win(),200);
+  const th=level.star; let st=1; if(score>=th[1])st=2; if(score>=th[2])st=3;
+  save.stars[curLevel]=Math.max(save.stars[curLevel]||0,st);
+  save.best[curLevel]=Math.max(save.best[curLevel]||0,score);
+  persist();
+  setTimeout(()=>showResult(true,st,bonus),900);
+}
+function loseRound(){
+  if(resultPending) return; resultPending=true;
+  state=ST.OVER; Audio_.lose();
+  setTimeout(()=>showResult(false,0,0),300);
+}
+
+//=========================== 主循环 ===========================
+let lastT=performance.now();
+function frame(now){
+  let dt=(now-lastT)/1000; lastT=now; dt=Math.min(dt,0.033);
+  timeScale=lerp(timeScale,timeScaleTarget,1-Math.pow(0.001,dt));
+  const gdt=dt*timeScale;
+  if(coachTimer>0){ coachTimer-=dt; if(coachTimer<=0) coachEl.classList.remove('show'); }
+  if(state===ST.FIRE) stepSpark(gdt);
+  else if(state===ST.CHAIN) processChain(gdt);
+  updateParticles(gdt);
+  shake=Math.max(0,shake-dt*55);
+  render();
+  requestAnimationFrame(frame);
+}
+
+//=========================== 渲染 ===========================
+function render(){
+  const W=canvas.width,H=canvas.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  const sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#2a0f30'); sky.addColorStop(0.5,'#1a0a24'); sky.addColorStop(1,'#100614');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+  const shx=(Math.random()*2-1)*shake, shy=(Math.random()*2-1)*shake;
+  ctx.setTransform(scale*DPR,0,0,scale*DPR,(offX+shx)*DPR,(offY+shy)*DPR);
+  drawStarfield();
+  ctx.strokeStyle='rgba(255,150,120,.14)'; ctx.lineWidth=2; ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+  if(state!==ST.MENU){
+    drawLinks();
+    for(const n of nodes) drawNode(n);
+    drawIgniter();
+    if(state===ST.AIM) drawAim();
+    for(const r of rockets) drawRocket(r);
+    if(spark) drawSpark();
+    drawParticles();
+    drawConfetti();
+    drawPopups();
+  }
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(state!==ST.MENU) drawHUD();
+}
+function drawStarfield(){ for(const s of stars){ const a=0.3+0.5*Math.abs(Math.sin(performance.now()/700+s.tw)); ctx.globalAlpha=a; ctx.fillStyle='#ffd9e8'; ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill(); } ctx.globalAlpha=1; }
+
+function drawIgniter(){
+  ctx.save(); ctx.translate(IGNITER.x,IGNITER.y);
+  ctx.fillStyle='#5a2030'; ctx.strokeStyle='#ff7a3c'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(0,0,24,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#ffd36b'; for(let i=0;i<3;i++){ const an=performance.now()/400+i*2.1; ctx.beginPath(); ctx.arc(Math.cos(an)*13,Math.sin(an)*13,3,0,7); ctx.fill(); }
+  ctx.fillStyle='#ff5a2c'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText('🔥',0,7); ctx.textAlign='left';
+  ctx.restore();
+}
+function drawAim(){
+  const pr=predictSpark(); if(!pr) return;
+  ctx.save();
+  for(let i=0;i<pr.pts.length;i+=2){ const p=pr.pts[i],a=1-i/pr.pts.length; ctx.globalAlpha=a*0.85;
+    ctx.fillStyle=pr.hit?'#6dffa8':'#ffd36b'; ctx.beginPath(); ctx.arc(p.x,p.y,a*4+1.5,0,7); ctx.fill(); }
+  ctx.globalAlpha=1;
+  if(pr.hit){ ctx.strokeStyle='#6dffa8'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(pr.hit.x,pr.hit.y,pr.hit.r+8,0,7); ctx.stroke(); }
+  ctx.restore();
+}
+function drawSpark(){
+  ctx.save(); ctx.translate(spark.x,spark.y);
+  ctx.globalAlpha=0.5; ctx.fillStyle='#ffd36b'; ctx.beginPath(); ctx.arc(0,0,SPARK_R+5,0,7); ctx.fill(); ctx.globalAlpha=1;
+  const g=ctx.createRadialGradient(0,0,1,0,0,SPARK_R); g.addColorStop(0,'#fff'); g.addColorStop(1,'#ff7a2c');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,SPARK_R,0,7); ctx.fill(); ctx.restore();
+}
+function drawRocket(r){
+  ctx.save(); ctx.translate(r.x,r.y); ctx.rotate(Math.atan2(r.vy,r.vx));
+  ctx.fillStyle='#ffce54'; ctx.strokeStyle='#ff7a3c'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(12,0); ctx.lineTo(-8,-6); ctx.lineTo(-8,6); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+function drawLinks(){
+  for(const l of links){ const a=1-l.life/l.max; ctx.globalAlpha=a*0.8; ctx.strokeStyle=l.color; ctx.lineWidth=3+a*3; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(l.x1,l.y1); ctx.lineTo(l.x2,l.y2); ctx.stroke(); }
+  ctx.globalAlpha=1;
+}
+function drawNode(n){
+  if(n.dead) return;
+  ctx.save(); ctx.translate(n.x,n.y);
+  const flash=n.flash>0?n.flash/0.35:0;
+  if(n.t==='balloon'){
+    const r=n.r;
+    ctx.globalAlpha=0.35; ctx.fillStyle=`hsl(${n.hue},90%,60%)`; ctx.beginPath(); ctx.arc(0,-2,r+5,0,7); ctx.fill(); ctx.globalAlpha=1;
+    const g=ctx.createRadialGradient(-r*0.3,-r*0.4,2,0,0,r); g.addColorStop(0,`hsl(${n.hue},100%,78%)`); g.addColorStop(1,`hsl(${n.hue},85%,48%)`);
+    ctx.fillStyle=g; ctx.beginPath(); ctx.ellipse(0,0,r*0.92,r,0,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(-r*0.3,-r*0.35,r*0.22,0,7); ctx.stroke();
+    ctx.strokeStyle=`hsl(${n.hue},80%,35%)`; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0,r); ctx.lineTo(0,r+10); ctx.stroke();
+    ctx.restore(); return;
+  }
+  if(flash>0){ ctx.globalAlpha=flash; ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(0,0,n.r+10*flash,0,7); ctx.fill(); ctx.globalAlpha=1; }
+  const dim = n.triggered?0.25:1; ctx.globalAlpha=dim;
+  if(n.t==='bomb'){
+    ctx.fillStyle=n.player?'#ff4a8a':'#33373f'; ctx.strokeStyle=n.player?'#ffd0e0':'#10131a'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,0,n.r,0,7); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle='#ffb14a'; ctx.lineWidth=3; ctx.beginPath(); ctx.moveTo(n.r*0.5,-n.r*0.7); ctx.quadraticCurveTo(n.r,-n.r*1.2,n.r*0.8,-n.r*1.4); ctx.stroke();
+    ctx.fillStyle='#ffd36b'; ctx.beginPath(); ctx.arc(n.r*0.8,-n.r*1.4,3,0,7); ctx.fill();
+    if(n.player && n.parked){ ctx.globalAlpha=1; ctx.fillStyle='#ffd0e0'; ctx.font='bold 12px sans-serif'; ctx.textAlign='center'; ctx.fillText('拖我',0,4); ctx.textAlign='left'; }
+  } else if(n.t==='firework'){
+    ctx.fillStyle='#7a2d6a'; ctx.strokeStyle='#ffd36b'; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(0,0,n.r,0,7); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#ffd36b'; for(let i=0;i<6;i++){ const a=i*Math.PI/3+performance.now()/600; ctx.beginPath(); ctx.arc(Math.cos(a)*n.r*0.5,Math.sin(a)*n.r*0.5,3,0,7); ctx.fill(); }
+  } else if(n.t==='domino'){
+    ctx.save(); ctx.rotate((n.fall||0)*1.1);
+    ctx.fillStyle='#dfe7f0'; ctx.strokeStyle='#8a96a8'; ctx.lineWidth=2;
+    roundRect(-n.r*0.5,-n.r,n.r,n.r*2,4); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#33373f'; ctx.beginPath(); ctx.arc(0,-n.r*0.45,3,0,7); ctx.arc(0,n.r*0.45,3,0,7); ctx.fill();
+    ctx.restore();
+  } else if(n.t==='rocket'){
+    ctx.save(); ctx.rotate(n.dir||0);
+    ctx.fillStyle='#ffce54'; ctx.strokeStyle='#ff7a3c'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(n.r,0); ctx.lineTo(-n.r*0.6,-n.r*0.7); ctx.lineTo(-n.r*0.6,n.r*0.7); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='rgba(255,255,255,.7)'; ctx.beginPath(); ctx.moveTo(-n.r*0.6,-n.r*0.5); ctx.lineTo(-n.r,0); ctx.lineTo(-n.r*0.6,n.r*0.5); ctx.fill();
+    ctx.restore();
+  }
+  ctx.globalAlpha=1; ctx.restore();
+}
+function drawParticles(){
+  for(const p of particles){ const a=1-p.t/p.life;
+    if(p.kind==='ring'){ ctx.globalAlpha=a*0.7; ctx.strokeStyle=p.color; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.stroke(); }
+    else if(p.kind==='spark'){ ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,7); ctx.fill(); }
+    else { ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot||0); ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size); ctx.restore(); }
+  }
+  ctx.globalAlpha=1;
+}
+function drawConfetti(){ for(const c of confetti){ const a=clamp(1-c.t/c.life,0,1); ctx.globalAlpha=a; ctx.fillStyle=c.color; ctx.save(); ctx.translate(c.x,c.y); ctx.rotate(c.rot); ctx.fillRect(-c.size/2,-c.size/2,c.size,c.size*0.6); ctx.restore(); } ctx.globalAlpha=1; }
+function drawPopups(){ for(const p of popups){ const a=1-p.t/p.life; ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.font=`900 ${24*p.scale}px sans-serif`; ctx.textAlign='center'; ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.5)'; ctx.strokeText(p.text,p.x,p.y); ctx.fillText(p.text,p.x,p.y); } ctx.globalAlpha=1; ctx.textAlign='left'; }
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+//=========================== HUD ===========================
+function drawHUD(){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  ctx.save();
+  ctx.fillStyle='rgba(20,8,16,.55)'; roundRect(14,14,238,64,16); ctx.fill();
+  ctx.fillStyle='#ffd9c0'; ctx.font='700 15px sans-serif'; ctx.fillText(`第 ${curLevel+1} 关 · ${level.name}`,28,38);
+  ctx.fillStyle='#ffe066'; ctx.font='900 28px sans-serif'; ctx.fillText(score.toLocaleString(),28,68);
+
+  const remain=nodes.filter(n=>n.t==='balloon'&&!n.dead).length;
+  ctx.textAlign='right';
+  ctx.fillStyle='rgba(20,8,16,.55)'; roundRect(w-150,14,136,64,16); ctx.fill();
+  ctx.fillStyle='#ff7ab0'; ctx.font='900 28px sans-serif'; ctx.fillText('🎈 '+remain,w-26,56);
+  ctx.textAlign='left';
+
+  // 连锁计数（连锁中放大显示）
+  if(state===ST.CHAIN && chainCount>0){
+    ctx.textAlign='center'; ctx.globalAlpha=0.92;
+    const sc=1+Math.min(chainCount*0.02,0.6);
+    ctx.fillStyle='#ffd36b'; ctx.font=`900 ${30*sc}px sans-serif`;
+    ctx.fillText('连锁 x'+chainCount, w/2, 60); ctx.globalAlpha=1; ctx.textAlign='left';
+  }
+
+  // 待放炸药数
+  const parked=placedBombs.filter(b=>b.parked).length;
+  if(level.place>0){ ctx.fillStyle='#ff8fb8'; ctx.font='600 14px sans-serif'; ctx.fillText('炸药 '+parked+'/'+level.place+'（拖到场上补全链路）',30,h-34); }
+
+  if(state===ST.AIM){ ctx.globalAlpha=0.55+0.35*Math.sin(performance.now()/300); ctx.fillStyle='#fff'; ctx.font='700 15px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('拖动瞄准 · 松手点火（仅一次机会）', w/2, h-26); ctx.globalAlpha=1; ctx.textAlign='left'; }
+
+  ctx.fillStyle='rgba(20,8,16,.55)'; roundRect(w/2-22,h-58,44,44,12); ctx.fill();
+  ctx.fillStyle='#ffd9c0'; ctx.font='20px sans-serif'; ctx.textAlign='center'; ctx.fillText(Audio_.isMuted()?'🔇':'🔊',w/2,h-30); ctx.textAlign='left';
+  ctx.restore();
+}
+
+//=========================== UI ===========================
+const titleScreen=document.getElementById('titleScreen'),levelSelect=document.getElementById('levelSelect'),
+      resultModal=document.getElementById('resultModal'),levelGrid=document.getElementById('levelGrid');
+function showTitle(){ state=ST.MENU; titleScreen.classList.remove('hidden'); levelSelect.classList.add('hidden'); resultModal.classList.add('hidden'); }
+function showLevelSelect(){ state=ST.MENU; titleScreen.classList.add('hidden'); resultModal.classList.add('hidden'); levelSelect.classList.remove('hidden'); buildLevelGrid(); }
+function buildLevelGrid(){ levelGrid.innerHTML='';
+  LEVELS.forEach((lv,i)=>{ const c=document.createElement('div'); c.className='cell'; const un=levelUnlocked(i); if(!un) c.classList.add('locked');
+    const st=save.stars[i]||0; c.innerHTML=`<div class="num">${un?(i+1):''}</div>`+(un?`<div class="stars">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>`:'');
+    if(un) c.onclick=()=>{ Audio_.click(); startLevel(i); }; levelGrid.appendChild(c); }); }
+function startLevel(i){ titleScreen.classList.add('hidden'); levelSelect.classList.add('hidden'); resultModal.classList.add('hidden'); loadLevel(i); }
+function showResult(win,st,bonus){
+  resultModal.classList.remove('hidden');
+  document.getElementById('resTitle').textContent=win?(st===3?'完美连锁!':'过关!'):'链路断了';
+  document.getElementById('resStars').textContent=win?('★'.repeat(st)+'☆'.repeat(3-st)):'💢';
+  document.getElementById('resScore').textContent='得分 '+score.toLocaleString()+(bonus>0?`（连锁/省弹奖励 +${bonus}）`:'');
+  document.getElementById('resBest').textContent='最佳 '+(save.best[curLevel]||0).toLocaleString();
+  const nb=document.getElementById('resNext');
+  if(win&&curLevel<LEVELS.length-1){ nb.textContent='下一关'; nb.classList.remove('hidden'); }
+  else if(win){ nb.textContent='🎉 通关'; nb.classList.remove('hidden'); }
+  else nb.classList.add('hidden');
+}
+document.getElementById('playBtn').onclick=()=>{ Audio_.resume(); Audio_.click(); showLevelSelect(); };
+document.getElementById('lsBack').onclick=()=>{ Audio_.click(); showTitle(); };
+document.getElementById('resRetry').onclick=()=>{ Audio_.click(); startLevel(curLevel); };
+document.getElementById('resNext').onclick=()=>{ Audio_.click(); if(curLevel<LEVELS.length-1) startLevel(curLevel+1); else showLevelSelect(); };
+document.getElementById('resMenu').onclick=()=>{ Audio_.click(); showLevelSelect(); };
+
+//=========================== 指针 ===========================
+function getPos(e){ const r=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; }
+canvas.addEventListener('pointerdown',e=>{ if(state===ST.MENU||state===ST.OVER) return; const p=getPos(e);
+  const w=canvas.width/DPR,h=canvas.height/DPR; if(p.y>h-58&&Math.abs(p.x-w/2)<22){ Audio_.toggleMute(); return; }
+  canvas.setPointerCapture(e.pointerId); onDown(p.x,p.y); });
+canvas.addEventListener('pointermove',e=>{ if(state===ST.MENU) return; const p=getPos(e); onMove(p.x,p.y); });
+canvas.addEventListener('pointerup',e=>{ if(state===ST.MENU) return; const p=getPos(e); onUp(p.x,p.y); });
+canvas.addEventListener('pointercancel',()=>{ drag=null; });
+['touchstart','touchmove','gesturestart'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+
+//=========================== 启动 ===========================
+showTitle();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

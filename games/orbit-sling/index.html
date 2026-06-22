@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#070b1e">
+<title>引力弹弓 · Orbit Sling</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { width:100%; height:100%; overflow:hidden; background:#05060f;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",Helvetica,Arial,sans-serif;
+    user-select:none; -webkit-user-select:none; touch-action:none; color:#fff; }
+  #game { position:fixed; inset:0; display:block; }
+  .overlay { position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; z-index:10;
+    background:radial-gradient(circle at 50% 35%, rgba(60,40,120,.45), rgba(4,5,14,.94)); }
+  .hidden { display:none !important; }
+  .logo { font-size:12.5vmin; font-weight:900; letter-spacing:.04em; line-height:1;
+    background:linear-gradient(180deg,#b388ff,#7c5cff 50%,#46c8ff);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 24px rgba(124,92,255,.55)) drop-shadow(0 4px 0 rgba(0,0,0,.3)); }
+  .logo .orb { display:inline-block; width:11vmin; height:11vmin; vertical-align:middle; margin:0 1vmin;
+    border-radius:50%; background:radial-gradient(circle at 35% 30%, #fff, #8a6bff 45%, #2a1170 80%);
+    box-shadow:0 0 30px rgba(138,107,255,.8); animation:spin 4s linear infinite; position:relative; }
+  .logo .orb::after{ content:""; position:absolute; inset:-22% -8%; border-radius:50%;
+    border:2px solid rgba(180,160,255,.6); transform:rotate(28deg); }
+  @keyframes spin { to{ transform:rotate(360deg);} }
+  .sub { margin-top:1.6vmin; font-size:3.4vmin; color:#c5c2ff; opacity:.9; font-weight:600; }
+  .btn { margin-top:4vmin; padding:2.4vmin 8vmin; font-size:4.4vmin; font-weight:800; color:#10042a;
+    border:none; border-radius:999px; cursor:pointer;
+    background:linear-gradient(180deg,#d7b3ff,#9a6bff 60%,#6c3cff); color:#fff;
+    box-shadow:0 6px 0 #4a23c0, 0 14px 34px rgba(110,60,255,.5); transition:transform .08s, box-shadow .08s; }
+  .btn:active { transform:translateY(4px); box-shadow:0 2px 0 #4a23c0; }
+  .btn.alt { background:linear-gradient(180deg,#7be0ff,#36a9ff 60%,#1f7ee0); box-shadow:0 6px 0 #115fb0, 0 14px 30px rgba(30,140,230,.45); }
+  .btn.alt:active { box-shadow:0 2px 0 #115fb0; }
+  .smallnote { margin-top:5vmin; font-size:2.7vmin; color:#a7a4d8; max-width:82vw; text-align:center; line-height:1.7; }
+
+  #levelSelect h2 { font-size:6vmin; font-weight:900; margin-bottom:3vmin; }
+  .grid { display:grid; grid-template-columns:repeat(4, 17vmin); gap:2.4vmin; }
+  @media (max-width:520px){ .grid{ grid-template-columns:repeat(3, 22vmin);} }
+  .cell { position:relative; aspect-ratio:1; border-radius:3.2vmin; cursor:pointer;
+    background:linear-gradient(180deg,#2a2160,#171036); border:.4vmin solid rgba(160,140,255,.25);
+    display:flex; align-items:center; justify-content:center; flex-direction:column; box-shadow:0 6px 0 rgba(6,4,20,.6); transition:transform .08s; }
+  .cell:active{ transform:translateY(3px); }
+  .cell .num { font-size:6vmin; font-weight:900; color:#e4dcff; }
+  .cell .stars { font-size:3vmin; margin-top:.4vmin; }
+  .cell.locked { filter:grayscale(.8) brightness(.55); cursor:default; }
+  .cell.locked .num::after{ content:"🔒"; }
+  .backbtn { position:fixed; top:3vmin; left:4vmin; font-size:4vmin; cursor:pointer; color:#d6cfff; z-index:11;
+    background:rgba(24,16,54,.7); border-radius:999px; width:11vmin; height:11vmin; display:flex; align-items:center; justify-content:center; }
+
+  #resultModal .card { width:84vmin; max-width:480px; padding:6vmin 5vmin 5vmin; border-radius:5vmin;
+    background:linear-gradient(180deg,#241a5a,#140d34); text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.6); border:.4vmin solid rgba(170,150,255,.25); }
+  #resTitle { font-size:8vmin; font-weight:900; }
+  #resStars { font-size:13vmin; margin:1vmin 0 2vmin; letter-spacing:1vmin; }
+  #resScore { font-size:4.2vmin; color:#d6cfff; font-weight:700; }
+  #resBest { font-size:3.2vmin; color:#a7a4d8; margin-top:1vmin; }
+  .rowbtns { display:flex; gap:3vmin; justify-content:center; margin-top:5vmin; }
+  .rowbtns .btn { margin-top:0; padding:2.2vmin 5vmin; font-size:3.8vmin; }
+
+  #coach { position:fixed; left:50%; transform:translateX(-50%); top:11vmin; z-index:9;
+    background:rgba(12,8,30,.85); color:#e8e4ff; padding:1.6vmin 4vmin; border-radius:999px; font-size:3.2vmin; font-weight:600;
+    pointer-events:none; opacity:0; transition:opacity .3s; border:1px solid rgba(170,150,255,.3); max-width:92vw; text-align:center; }
+  #coach.show { opacity:1; }
+  .credit { position:fixed; bottom:2.2vmin; font-size:2.4vmin; color:#6f6aa0; z-index:11; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="titleScreen" class="overlay">
+  <div class="logo">引力<span class="orb"></span>弹弓</div>
+  <div class="sub">Orbit Sling · 借引力绕场命中</div>
+  <button class="btn" id="playBtn">开始航行</button>
+  <div class="smallnote">拖动瞄准 → 看<b>引力预测线</b>如何被星球拉弯 → 松手发射<br>拖动你的<b>紫色引力井</b>布置轨迹，打出绕一圈命中的神之一射</div>
+  <div class="credit">H5Game · 单文件零依赖</div>
+</div>
+
+<div id="levelSelect" class="overlay hidden">
+  <div class="backbtn" id="lsBack">‹</div>
+  <h2>选择星域</h2>
+  <div class="grid" id="levelGrid"></div>
+</div>
+
+<div id="resultModal" class="overlay hidden">
+  <div class="card">
+    <div id="resTitle">命中！</div>
+    <div id="resStars">★★★</div>
+    <div id="resScore">得分 0</div>
+    <div id="resBest">最佳 0</div>
+    <div class="rowbtns">
+      <button class="btn alt" id="resRetry">重玩</button>
+      <button class="btn" id="resNext">下一关</button>
+    </div>
+    <div class="rowbtns" style="margin-top:3vmin">
+      <button class="btn" id="resMenu" style="background:linear-gradient(180deg,#a7a4d8,#7d79b8);box-shadow:0 6px 0 #4f4c80">星域选择</button>
+    </div>
+  </div>
+</div>
+
+<div id="coach"></div>
+
+<script>
+"use strict";
+/* =========================================================================
+   引力弹弓 · Orbit Sling —— 借引力绕场命中的太空弹射解谜
+   核心：发射前规划。实时引力预测线 + 可拖放的引力井，找到绕行命中的轨迹。
+   纯单文件零依赖。世界 1280x800 等比 contain 缩放，全局可见。
+   ========================================================================= */
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+let DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+const WORLD_W = 1280, WORLD_H = 800;
+let scale = 1, offX = 0, offY = 0;
+
+function resize(){
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.width = Math.floor(w*DPR); canvas.height = Math.floor(h*DPR);
+  canvas.style.width = w+'px'; canvas.style.height = h+'px';
+  scale = Math.min(w/WORLD_W, h/WORLD_H);
+  offX = (w - WORLD_W*scale)/2; offY = (h - WORLD_H*scale)/2;
+}
+window.addEventListener('resize', resize); resize();
+
+//=========================== 音效（WebAudio 程序化）===========================
+const Audio_ = (()=>{
+  let ac=null, master=null, muted=false;
+  function ensure(){ if(ac) return; try{ ac=new (window.AudioContext||window.webkitAudioContext)(); master=ac.createGain(); master.gain.value=0.5; master.connect(ac.destination);}catch(e){ac=null;} }
+  function tone(freq,dur,type='sine',vol=0.4,slideTo=null){ if(!ac||muted) return;
+    const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();
+    o.type=type;o.frequency.setValueAtTime(freq,t); if(slideTo)o.frequency.exponentialRampToValueAtTime(Math.max(1,slideTo),t+dur);
+    g.gain.setValueAtTime(0,t);g.gain.linearRampToValueAtTime(vol,t+0.01);g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+0.02); }
+  function noise(dur,vol=0.4,hp=400){ if(!ac||muted) return; const t=ac.currentTime,n=Math.floor(ac.sampleRate*dur);
+    const b=ac.createBuffer(1,n,ac.sampleRate),d=b.getChannelData(0); for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+    const s=ac.createBufferSource();s.buffer=b; const f=ac.createBiquadFilter();f.type='highpass';f.frequency.value=hp;
+    const g=ac.createGain();g.gain.value=vol;g.gain.exponentialRampToValueAtTime(0.0001,t+dur); s.connect(f);f.connect(g);g.connect(master);s.start(t); }
+  const S={
+    launch(){ ensure(); tone(180,0.3,'sawtooth',0.35,640); noise(0.2,0.18,500); },
+    collect(n){ ensure(); tone(660+ n*90,0.16,'triangle',0.4,1200+n*120); tone(990+n*90,0.12,'sine',0.25,1600); },
+    planet(){ ensure(); noise(0.3,0.5,200); tone(90,0.35,'sawtooth',0.4,40); },
+    blackhole(){ ensure(); tone(70,0.6,'sine',0.5,28); noise(0.5,0.3,120); },
+    warp(){ ensure(); tone(400,0.25,'sine',0.35,1400); tone(1400,0.2,'sine',0.2,300); },
+    win(){ ensure(); [523,659,784,1047,1319].forEach((f,i)=>setTimeout(()=>tone(f,0.34,'triangle',0.4),i*100)); },
+    lose(){ ensure(); [392,330,262,196].forEach((f,i)=>setTimeout(()=>tone(f,0.32,'sawtooth',0.32),i*130)); },
+    place(){ ensure(); tone(520,0.08,'sine',0.25,760); },
+    click(){ ensure(); tone(700,0.05,'square',0.22,920); },
+  };
+  S.toggleMute=()=>{muted=!muted;return muted;}; S.isMuted=()=>muted;
+  S.resume=()=>{ ensure(); if(ac&&ac.state==='suspended')ac.resume(); };
+  return S;
+})();
+
+//=========================== 工具 ===========================
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rand=(a,b)=>a+Math.random()*(b-a);
+const len=(x,y)=>Math.hypot(x,y);
+
+//=========================== 调参（真机手感集中区）===========================
+const LAUNCH = {x:130, y:400};   // 发射台
+const PROJ_R = 13;               // 弹丸半径
+const MAX_PULL = 180;            // 最大拉拽
+const MAX_SPEED = 760;           // 最大发射速度
+const FIXED = 0.016;             // 物理固定步长（预测与实飞共用 → 预测精确）
+const PRED_STEPS = 460;          // 预测步数
+const MAX_LIFE = 11;             // 弹丸寿命（秒）
+const BOUNDS = {x0:-160,y0:-160,x1:WORLD_W+160,y1:WORLD_H+160};
+const ANCHOR_G = 4.2e6;          // 玩家引力井强度
+const ANCHOR_R = 18;             // 引力井把手半径
+
+// 天体类型默认强度
+const BODY_G = { planet:5.2e6, blackhole:1.7e7, repulsor:-4.4e6 };
+
+//=========================== 关卡数据 ===========================
+// bodies: {x,y,r, t:'planet'|'blackhole'|'repulsor'|'wormhole', id?(虫洞配对), g?(覆盖强度), spin?}
+// targets:{x,y}
+const LEVELS = [
+  { name:"初识引力", shots:4, anchors:0, star:[1200,2400,3600],
+    coach:"拖动瞄准，看预测线被星球拉弯，松手发射命中星星",
+    bodies:[ {x:680,y:400,r:54,t:'planet'} ],
+    targets:[ {x:1040,y:250}, {x:1040,y:560} ] },
+
+  { name:"绕行命中", shots:4, anchors:0, star:[1400,2800,4200],
+    coach:"目标在星球背面——让弹丸绕过去",
+    bodies:[ {x:640,y:400,r:64,t:'planet'} ],
+    targets:[ {x:560,y:680}, {x:760,y:120}, {x:980,y:400} ] },
+
+  { name:"你的引力井", shots:4, anchors:1, star:[1600,3200,4800],
+    coach:"拖动紫色引力井,亲手把弹道掰弯",
+    bodies:[ {x:760,y:400,r:46,t:'planet'} ],
+    targets:[ {x:1080,y:200}, {x:1080,y:600}, {x:520,y:640} ] },
+
+  { name:"黑洞甩飞", shots:4, anchors:1, star:[1800,3600,5400],
+    coach:"黑洞引力极强,擦边而过可获得惊人加速——别被吞了",
+    bodies:[ {x:620,y:430,r:30,t:'blackhole'} ],
+    targets:[ {x:980,y:160}, {x:1120,y:420}, {x:980,y:680} ] },
+
+  { name:"斥力脉冲", shots:4, anchors:1, star:[1900,3800,5600],
+    coach:"蓝色脉冲星会把弹丸推开,借它转向",
+    bodies:[ {x:560,y:400,r:34,t:'repulsor'}, {x:900,y:400,r:48,t:'planet'} ],
+    targets:[ {x:760,y:120}, {x:760,y:680}, {x:1140,y:400} ] },
+
+  { name:"虫洞穿梭", shots:4, anchors:1, star:[2000,4000,6000],
+    coach:"成对虫洞:进一个,从另一个出来,速度不变",
+    bodies:[ {x:540,y:300,r:30,t:'wormhole',id:1}, {x:980,y:560,r:30,t:'wormhole',id:1},
+             {x:760,y:430,r:42,t:'planet'} ],
+    targets:[ {x:1120,y:200}, {x:1080,y:680}, {x:380,y:620} ] },
+
+  { name:"双星系统", shots:4, anchors:2, star:[2300,4600,7000],
+    coach:"两颗行星拉锯,用引力井找到平衡的弹道",
+    bodies:[ {x:560,y:280,r:48,t:'planet'}, {x:900,y:560,r:48,t:'planet'} ],
+    targets:[ {x:760,y:160}, {x:1120,y:340}, {x:560,y:680}, {x:1040,y:680} ] },
+
+  { name:"黑洞回廊", shots:5, anchors:2, star:[2600,5200,7800],
+    coach:"在黑洞与行星之间穿针引线",
+    bodies:[ {x:520,y:400,r:28,t:'blackhole'}, {x:860,y:240,r:44,t:'planet'}, {x:860,y:560,r:44,t:'planet'} ],
+    targets:[ {x:1120,y:200}, {x:1120,y:600}, {x:760,y:400}, {x:380,y:660} ] },
+
+  { name:"脉冲迷宫", shots:5, anchors:2, star:[2800,5600,8400],
+    coach:"多个斥力星组成迷宫,引力井是你的钥匙",
+    bodies:[ {x:520,y:260,r:30,t:'repulsor'}, {x:520,y:560,r:30,t:'repulsor'},
+             {x:860,y:410,r:30,t:'repulsor'}, {x:1060,y:240,r:40,t:'planet'} ],
+    targets:[ {x:760,y:140}, {x:760,y:680}, {x:1120,y:560}, {x:380,y:420} ] },
+
+  { name:"虫洞星网", shots:5, anchors:2, star:[3000,6000,9000],
+    coach:"两组虫洞 + 引力,绕出最远的连锁命中",
+    bodies:[ {x:480,y:240,r:28,t:'wormhole',id:1}, {x:1080,y:240,r:28,t:'wormhole',id:1},
+             {x:480,y:600,r:28,t:'wormhole',id:2}, {x:1080,y:600,r:28,t:'wormhole',id:2},
+             {x:760,y:420,r:46,t:'planet'} ],
+    targets:[ {x:760,y:140}, {x:760,y:700}, {x:280,y:420}, {x:1180,y:420} ] },
+
+  { name:"引力风暴", shots:5, anchors:2, star:[3400,6800,10200],
+    coach:"行星·黑洞·斥力齐聚,一发连锁清场是大师证明",
+    bodies:[ {x:520,y:300,r:44,t:'planet'}, {x:900,y:300,r:26,t:'blackhole'},
+             {x:520,y:560,r:30,t:'repulsor'}, {x:980,y:580,r:44,t:'planet'} ],
+    targets:[ {x:760,y:160}, {x:740,y:430}, {x:1140,y:300}, {x:760,y:700}, {x:300,y:430} ] },
+
+  { name:"终极星域", shots:6, anchors:2, star:[4200,8400,13000],
+    coach:"所有机制全开——证明你掌控了整个引力场",
+    bodies:[ {x:460,y:260,r:26,t:'blackhole'}, {x:820,y:430,r:48,t:'planet'},
+             {x:1100,y:260,r:30,t:'repulsor'}, {x:1100,y:620,r:40,t:'planet'},
+             {x:380,y:600,r:26,t:'wormhole',id:1}, {x:760,y:120,r:26,t:'wormhole',id:1} ],
+    targets:[ {x:620,y:160}, {x:1180,y:430}, {x:620,y:700}, {x:980,y:200}, {x:980,y:660}, {x:300,y:380} ] },
+];
+
+//=========================== 存档 ===========================
+const SAVE_KEY='orbitsling_save_v1';
+let save={stars:{},best:{}};
+try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(s) save=s; }catch(e){}
+function persist(){ try{ localStorage.setItem(SAVE_KEY,JSON.stringify(save)); }catch(e){} }
+function levelUnlocked(i){ return i===0 || (save.stars[i-1]||0)>=1; }
+
+//=========================== 状态 ===========================
+const ST={ MENU:0, AIM:1, FLY:2, SETTLE:3, OVER:4 };
+let state=ST.MENU;
+let curLevel=0, level=null;
+let bodies=[], targets=[], anchors=[];
+let proj=null, shotsLeft=0, score=0, comboThisShot=0;
+let particles=[], popups=[], trail=[], stars=[];
+let predLine=null, predHit=false;
+let shake=0, coachTimer=0, resultPending=false, flyTime=0, accDt=0;
+let drag=null; // {type:'aim'|'anchor', anchor?}
+
+//=========================== 装载 ===========================
+function loadLevel(i){
+  curLevel=i; level=LEVELS[i];
+  bodies = level.bodies.map(b=>({...b, g: b.g!=null?b.g:(b.t==='wormhole'?0:BODY_G[b.t]), spin:Math.random()*6, dead:false}));
+  targets = level.targets.map(t=>({...t, r:18, dead:false, wob:Math.random()*6}));
+  // 引力井初始分布在发射台上方一列
+  anchors = [];
+  for(let a=0;a<level.anchors;a++){ anchors.push({x:LAUNCH.x+70, y:240 - a*70, r:ANCHOR_R}); }
+  shotsLeft=level.shots; score=0; comboThisShot=0;
+  particles=[]; popups=[]; trail=[]; predLine=null; predHit=false;
+  shake=0; resultPending=false; drag=null;
+  buildStarfield();
+  newProjectile();
+  state=ST.AIM;
+  showCoach(level.coach, 3400);
+}
+function newProjectile(){
+  proj={ x:LAUNCH.x, y:LAUNCH.y, vx:0, vy:0, alive:true, launched:false };
+  comboThisShot=0; flyTime=0; accDt=0; trail=[];
+  state=ST.AIM; aimVec=null;
+  predLine=null; predHit=false;
+}
+function buildStarfield(){
+  stars=[]; for(let i=0;i<90;i++) stars.push({x:rand(0,WORLD_W),y:rand(0,WORLD_H),r:rand(0.4,1.8),tw:rand(0,6)});
+}
+
+//=========================== 教学 ===========================
+const coachEl=document.getElementById('coach');
+function showCoach(t,ms=2800){ coachEl.textContent=t; coachEl.classList.add('show'); coachTimer=ms/1000; }
+
+//=========================== 引力物理（预测与实飞共用）===========================
+function accelAt(x,y){
+  let ax=0, ay=0;
+  for(const b of bodies){
+    if(b.dead || b.t==='wormhole') continue;
+    let dx=b.x-x, dy=b.y-y; let r=len(dx,dy); const minR=b.r*0.85;
+    if(r<minR) r=minR;
+    const a = b.g/(r*r);
+    ax += a*dx/r; ay += a*dy/r;
+  }
+  for(const an of anchors){
+    let dx=an.x-x, dy=an.y-y; let r=len(dx,dy); if(r<24) r=24;
+    const a = ANCHOR_G/(r*r);
+    ax += a*dx/r; ay += a*dy/r;
+  }
+  return {ax,ay};
+}
+// 推进一步（半隐式欧拉）
+function simStep(p,dt){
+  const a=accelAt(p.x,p.y);
+  p.vx += a.ax*dt; p.vy += a.ay*dt;
+  p.x += p.vx*dt; p.y += p.vy*dt;
+}
+
+// 预测：返回点序列 + 是否命中任意目标
+function predict(vx,vy){
+  let p={x:LAUNCH.x,y:LAUNCH.y,vx,vy};
+  const pts=[{x:p.x,y:p.y}]; let willHit=false;
+  const hitSet=new Set();
+  for(let i=0;i<PRED_STEPS;i++){
+    simStep(p,FIXED);
+    pts.push({x:p.x,y:p.y});
+    // 出界
+    if(p.x<BOUNDS.x0||p.x>BOUNDS.x1||p.y<BOUNDS.y0||p.y>BOUNDS.y1) break;
+    // 撞实体（行星/黑洞核心）截断
+    let stop=false;
+    for(const b of bodies){
+      if(b.dead) continue;
+      if(b.t==='wormhole'){
+        if(len(p.x-b.x,p.y-b.y) < b.r){ // 简化：预测里虫洞瞬移到配对
+          const o=bodies.find(o2=>o2!==b&&o2.t==='wormhole'&&o2.id===b.id&&!o2.dead);
+          if(o){ const sp=len(p.vx,p.vy)||1; p.x=o.x+p.vx/sp*(o.r+PROJ_R+6); p.y=o.y+p.vy/sp*(o.r+PROJ_R+6); }
+        }
+        continue;
+      }
+      if(b.t==='repulsor') continue;
+      if(len(p.x-b.x,p.y-b.y) < b.r+PROJ_R){ stop=true; break; }
+    }
+    // 命中目标
+    for(const t of targets){
+      if(t.dead||hitSet.has(t)) continue;
+      if(len(p.x-t.x,p.y-t.y) < t.r+PROJ_R){ hitSet.add(t); willHit=true; }
+    }
+    if(stop) break;
+  }
+  return {pts, willHit, hitCount:hitSet.size};
+}
+function updatePrediction(){
+  if(state!==ST.AIM || !proj) { predLine=null; return; }
+  const r=predict(proj.vx, proj.vy);
+  // proj.vx/vy 在瞄准时未设;改为用当前拉拽推算
+  predLine=r.pts; predHit=r.willHit;
+}
+
+//=========================== 输入 ===========================
+function screenToWorld(px,py){ return { x:(px-offX)/scale, y:(py-offY)/scale }; }
+
+function onDown(px,py){
+  Audio_.resume();
+  if(state!==ST.AIM) return;
+  const w=screenToWorld(px,py);
+  // 优先抓引力井
+  for(const an of anchors){
+    if(len(w.x-an.x,w.y-an.y) < an.r+26){ drag={type:'anchor',anchor:an}; return; }
+  }
+  // 否则进入瞄准
+  drag={type:'aim'};
+  setAim(w);
+}
+function onMove(px,py){
+  if(!drag) return;
+  const w=screenToWorld(px,py);
+  if(drag.type==='anchor'){
+    drag.anchor.x=clamp(w.x,20,WORLD_W-20); drag.anchor.y=clamp(w.y,20,WORLD_H-20);
+    refreshAimPrediction();
+  } else {
+    setAim(w);
+  }
+}
+function onUp(px,py){
+  if(!drag) return;
+  if(drag.type==='aim'){
+    launch();
+  } else {
+    Audio_.place();
+  }
+  drag=null;
+}
+let aimVec=null; // {vx,vy,pull}
+function setAim(w){
+  let dx=LAUNCH.x-w.x, dy=LAUNCH.y-w.y; const d=len(dx,dy);
+  if(d<10){ aimVec=null; proj.vx=0; proj.vy=0; predLine=null; return; }
+  const pull=Math.min(d,MAX_PULL); const nx=dx/d, ny=dy/d;
+  const speed=(pull/MAX_PULL)*MAX_SPEED;
+  proj.vx=nx*speed; proj.vy=ny*speed; aimVec={vx:proj.vx,vy:proj.vy,pull};
+  // 弹丸视觉拉到拉拽点
+  proj.x=LAUNCH.x - nx*pull; proj.y=LAUNCH.y - ny*pull;
+  refreshAimPrediction();
+}
+function refreshAimPrediction(){
+  if(!aimVec){ predLine=null; return; }
+  const r=predict(aimVec.vx, aimVec.vy);
+  predLine=r.pts; predHit=r.willHit;
+}
+function launch(){
+  if(!aimVec){ return; }
+  proj.x=LAUNCH.x; proj.y=LAUNCH.y;
+  proj.vx=aimVec.vx; proj.vy=aimVec.vy;
+  proj.launched=true; proj.alive=true;
+  state=ST.FLY; shotsLeft--; flyTime=0; accDt=0; trail=[];
+  predLine=null; aimVec=null;
+  Audio_.launch();
+}
+
+//=========================== 实飞推进 ===========================
+function stepFlight(frameDt){
+  if(!proj||!proj.launched||!proj.alive) return;
+  accDt += frameDt; let guard=0;
+  while(accDt>=FIXED && proj.alive && guard<12){
+    accDt-=FIXED; guard++; flyTime+=FIXED;
+    simStep(proj,FIXED);
+    trail.push({x:proj.x,y:proj.y}); if(trail.length>90) trail.shift();
+
+    // 虫洞
+    for(const b of bodies){
+      if(b.t!=='wormhole'||b.dead) continue;
+      if(len(proj.x-b.x,proj.y-b.y) < b.r){
+        const o=bodies.find(o2=>o2!==b&&o2.t==='wormhole'&&o2.id===b.id&&!o2.dead);
+        if(o){ const sp=len(proj.vx,proj.vy)||1; proj.x=o.x+proj.vx/sp*(o.r+PROJ_R+8); proj.y=o.y+proj.vy/sp*(o.r+PROJ_R+8);
+          Audio_.warp(); spawnRing(b.x,b.y,'#7be0ff'); spawnRing(o.x,o.y,'#b388ff'); }
+      }
+    }
+    // 命中目标
+    for(const t of targets){
+      if(t.dead) continue;
+      if(len(proj.x-t.x,proj.y-t.y) < t.r+PROJ_R){
+        t.dead=true; comboThisShot++;
+        const v=120*comboThisShot;
+        score+=v; Audio_.collect(comboThisShot);
+        floatText(t.x,t.y-20,'+'+v,'#ffe066');
+        if(comboThisShot>1) floatText(t.x,t.y-54,'连锁 x'+comboThisShot,'#7be0ff',1.2);
+        for(let k=0;k<14;k++) spawnSpark(t.x,t.y,'#ffe89a');
+        spawnRing(t.x,t.y,'#ffd76a'); doShake(6);
+      }
+    }
+    // 撞实体
+    for(const b of bodies){
+      if(b.dead||b.t==='wormhole'||b.t==='repulsor') continue;
+      if(len(proj.x-b.x,proj.y-b.y) < b.r+PROJ_R){
+        proj.alive=false;
+        if(b.t==='blackhole'){ Audio_.blackhole(); for(let k=0;k<24;k++) spawnSpark(proj.x,proj.y,'#b388ff'); floatText(b.x,b.y-b.r-10,'被吞噬','#c08bff'); }
+        else { Audio_.planet(); for(let k=0;k<18;k++) spawnDebris(proj.x,proj.y,'#9ab4ff'); doShake(9); }
+        break;
+      }
+    }
+    // 出界 / 超时
+    if(proj.x<BOUNDS.x0||proj.x>BOUNDS.x1||proj.y<BOUNDS.y0||proj.y>BOUNDS.y1) proj.alive=false;
+    if(flyTime>MAX_LIFE){ proj.alive=false; }
+    // 全部命中即可提前结束
+    if(targets.every(t=>t.dead)) proj.alive=false;
+  }
+  if(!proj.alive && state===ST.FLY){ state=ST.SETTLE; onShotSettled(); }
+}
+
+function onShotSettled(){
+  const remain=targets.filter(t=>!t.dead).length;
+  if(remain===0){ winLevel(); return; }
+  if(shotsLeft<=0){ loseLevel(); return; }
+  setTimeout(()=>{ if(state===ST.SETTLE) newProjectile(); }, 600);
+}
+function winLevel(){
+  if(resultPending) return; resultPending=true;
+  const bonus=shotsLeft*900 + anchorBonus();
+  score+=bonus; state=ST.OVER; Audio_.win();
+  const th=level.star; let st=1; if(score>=th[1])st=2; if(score>=th[2])st=3;
+  save.stars[curLevel]=Math.max(save.stars[curLevel]||0,st);
+  save.best[curLevel]=Math.max(save.best[curLevel]||0,score);
+  persist();
+  setTimeout(()=>showResult(true,st,bonus),700);
+}
+function anchorBonus(){ return 0; }
+function loseLevel(){
+  if(resultPending) return; resultPending=true;
+  state=ST.OVER; Audio_.lose();
+  setTimeout(()=>showResult(false,0,0),500);
+}
+
+//=========================== 粒子 / 反馈 ===========================
+function spawnDebris(x,y,c){ particles.push({x,y,vx:rand(-220,220),vy:rand(-220,220),g:0,life:rand(0.4,0.8),t:0,color:c,size:rand(3,7),kind:'box',rot:rand(0,6),vr:rand(-8,8)}); }
+function spawnSpark(x,y,c){ particles.push({x,y,vx:rand(-300,300),vy:rand(-300,300),g:0,life:rand(0.25,0.5),t:0,color:c,size:rand(2,4),kind:'spark'}); }
+function spawnRing(x,y,c){ particles.push({x,y,r:6,vr:420,life:0.45,t:0,color:c,kind:'ring'}); }
+function floatText(x,y,text,color,scale=1){ popups.push({x,y,text,color,life:1.0,t:0,scale}); }
+function doShake(v){ shake=Math.min(shake+v,22); }
+function updateParticles(dt){
+  for(const p of particles){ p.t+=dt; if(p.kind==='ring'){p.r+=p.vr*dt;} else {p.x+=p.vx*dt;p.y+=p.vy*dt; if(p.vr)p.rot+=p.vr*dt; p.vx*=0.96; p.vy*=0.96;} }
+  particles=particles.filter(p=>p.t<p.life);
+  for(const p of popups){ p.t+=dt; p.y-=32*dt; }
+  popups=popups.filter(p=>p.t<p.life);
+}
+
+//=========================== 主循环 ===========================
+let lastT=performance.now();
+function frame(now){
+  let dt=(now-lastT)/1000; lastT=now; dt=Math.min(dt,0.033);
+  if(coachTimer>0){ coachTimer-=dt; if(coachTimer<=0) coachEl.classList.remove('show'); }
+  if(state===ST.FLY){ stepFlight(dt); }
+  updateParticles(dt);
+  shake=Math.max(0,shake-dt*55);
+  // 天体自转视觉
+  for(const b of bodies) b.spin += dt*(b.t==='blackhole'?1.6:0.4);
+  render();
+  requestAnimationFrame(frame);
+}
+
+//=========================== 渲染 ===========================
+function render(){
+  const W=canvas.width,H=canvas.height;
+  ctx.setTransform(1,0,0,1,0,0);
+  // 深空背景（全屏）
+  const sky=ctx.createLinearGradient(0,0,0,H);
+  sky.addColorStop(0,'#0a0a22'); sky.addColorStop(0.5,'#10103a'); sky.addColorStop(1,'#05060f');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H);
+
+  const shx=(Math.random()*2-1)*shake, shy=(Math.random()*2-1)*shake;
+  ctx.setTransform(scale*DPR,0,0,scale*DPR,(offX+shx)*DPR,(offY+shy)*DPR);
+
+  drawStarfield();
+  // 世界边框
+  ctx.strokeStyle='rgba(140,130,220,.18)'; ctx.lineWidth=2; ctx.strokeRect(0,0,WORLD_W,WORLD_H);
+
+  if(state!==ST.MENU){
+    for(const b of bodies) drawBody(b);
+    for(const t of targets) drawTarget(t);
+    drawLaunchPad();
+    if(state===ST.AIM){ drawPrediction(); for(const an of anchors) drawAnchor(an); }
+    if(state===ST.FLY||state===ST.SETTLE){ for(const an of anchors) drawAnchor(an,true); drawTrail(); }
+    drawParticles();
+    if(proj && (state===ST.AIM||state===ST.FLY)) drawProj();
+    drawPopups();
+  }
+
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  if(state!==ST.MENU) drawHUD();
+}
+
+function drawStarfield(){
+  for(const s of stars){
+    const a=0.4+0.5*Math.abs(Math.sin(performance.now()/700+s.tw));
+    ctx.globalAlpha=a; ctx.fillStyle='#cdd6ff';
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+}
+
+function drawLaunchPad(){
+  ctx.save(); ctx.translate(LAUNCH.x,LAUNCH.y);
+  ctx.fillStyle='#3a3470'; ctx.strokeStyle='#8a7bff'; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(0,0,26,0,7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='#b3a8ff';
+  for(let i=0;i<3;i++){ const an=performance.now()/600+i*2.1; ctx.beginPath();
+    ctx.arc(Math.cos(an)*16,Math.sin(an)*16,3,0,7); ctx.fill(); }
+  ctx.restore();
+}
+
+function drawPrediction(){
+  if(!predLine||predLine.length<2) return;
+  const col = predHit ? '#6dffa8' : 'rgba(180,170,255,.85)';
+  ctx.save();
+  // 命中时整条线发光脉冲
+  for(let i=0;i<predLine.length;i+=4){
+    const p=predLine[i]; const a=1-i/predLine.length;
+    ctx.globalAlpha=a*(predHit?0.95:0.7);
+    ctx.fillStyle=col;
+    const r=predHit?(2.6+Math.sin(performance.now()/120+i)*0.8):2.2;
+    ctx.beginPath(); ctx.arc(p.x,p.y,r,0,7); ctx.fill();
+  }
+  ctx.globalAlpha=1;
+  if(predHit){
+    const end=predLine[predLine.length-1];
+    ctx.fillStyle='#6dffa8'; ctx.font='bold 22px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('命中航线 ✓', end.x, end.y-18); ctx.textAlign='left';
+  }
+  ctx.restore();
+}
+
+function drawAnchor(an, flying){
+  ctx.save(); ctx.translate(an.x,an.y);
+  // 引力场圈
+  const pulse=8+Math.sin(performance.now()/300)*3;
+  ctx.globalAlpha=flying?0.25:0.5;
+  for(let i=1;i<=3;i++){ ctx.strokeStyle='rgba(150,110,255,'+(0.5/i)+')'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(0,0,an.r+pulse+i*16,0,7); ctx.stroke(); }
+  ctx.globalAlpha=1;
+  const g=ctx.createRadialGradient(0,0,2,0,0,an.r);
+  g.addColorStop(0,'#e0d4ff'); g.addColorStop(0.6,'#9a6bff'); g.addColorStop(1,'#5a2ed0');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,an.r,0,7); ctx.fill();
+  if(!flying){ ctx.strokeStyle='rgba(255,255,255,.7)'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,an.r,0,7); ctx.stroke(); }
+  ctx.restore();
+}
+
+function drawBody(b){
+  if(b.dead) return;
+  ctx.save(); ctx.translate(b.x,b.y); ctx.rotate(b.spin);
+  if(b.t==='planet'){
+    const g=ctx.createRadialGradient(-b.r*0.3,-b.r*0.3,2,0,0,b.r);
+    g.addColorStop(0,'#9fd4ff'); g.addColorStop(0.6,'#4f86d8'); g.addColorStop(1,'#274a8a');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,b.r,0,7); ctx.fill();
+    ctx.strokeStyle='rgba(180,210,255,.5)'; ctx.lineWidth=2; ctx.beginPath(); ctx.ellipse(0,0,b.r*1.35,b.r*0.4,0.5,0,7); ctx.stroke();
+    // 引力场暗示
+    ctx.globalAlpha=0.12; ctx.strokeStyle='#9fd4ff'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.arc(0,0,b.r+22,0,7); ctx.stroke(); ctx.globalAlpha=1;
+  } else if(b.t==='blackhole'){
+    // 吸积盘
+    for(let i=0;i<3;i++){ ctx.strokeStyle=['#b388ff','#7c5cff','#ff7be0'][i]; ctx.lineWidth=4-i;
+      ctx.globalAlpha=0.8-i*0.2; ctx.beginPath(); ctx.ellipse(0,0,b.r*(1.7+i*0.5),b.r*(0.7+i*0.2),i*0.7,0,7); ctx.stroke(); }
+    ctx.globalAlpha=1;
+    const g=ctx.createRadialGradient(0,0,2,0,0,b.r*1.2);
+    g.addColorStop(0,'#000'); g.addColorStop(0.7,'#1a0830'); g.addColorStop(1,'#6a3cd0');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,b.r,0,7); ctx.fill();
+  } else if(b.t==='repulsor'){
+    const g=ctx.createRadialGradient(0,0,2,0,0,b.r);
+    g.addColorStop(0,'#dffaff'); g.addColorStop(0.5,'#3fd0ff'); g.addColorStop(1,'#1278c8');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,b.r,0,7); ctx.fill();
+    ctx.globalAlpha=0.5+0.3*Math.sin(performance.now()/180); ctx.strokeStyle='#9af0ff'; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.arc(0,0,b.r+8+Math.sin(performance.now()/180)*4,0,7); ctx.stroke(); ctx.globalAlpha=1;
+    // 向外箭头
+    ctx.fillStyle='rgba(255,255,255,.6)';
+    for(let i=0;i<6;i++){ ctx.save(); ctx.rotate(i*Math.PI/3); ctx.beginPath();
+      ctx.moveTo(0,-b.r-6); ctx.lineTo(-4,-b.r-1); ctx.lineTo(4,-b.r-1); ctx.fill(); ctx.restore(); }
+  } else if(b.t==='wormhole'){
+    for(let i=0;i<4;i++){ ctx.strokeStyle=['#7be0ff','#b388ff','#7be0ff','#b388ff'][i]; ctx.lineWidth=3;
+      ctx.globalAlpha=0.9-i*0.18; ctx.beginPath(); ctx.arc(0,0,b.r-i*5,b.spin*(i+1),b.spin*(i+1)+5); ctx.stroke(); }
+    ctx.globalAlpha=1;
+    const g=ctx.createRadialGradient(0,0,2,0,0,b.r*0.6); g.addColorStop(0,'#1a0a3a'); g.addColorStop(1,'#5a2ed0');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,b.r*0.55,0,7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawTarget(t){
+  if(t.dead) return;
+  ctx.save(); ctx.translate(t.x,t.y);
+  const pulse=1+0.12*Math.sin(performance.now()/280+t.wob);
+  ctx.rotate(performance.now()/900+t.wob); ctx.scale(pulse,pulse);
+  ctx.globalAlpha=0.4; ctx.fillStyle='#ffe89a'; ctx.beginPath(); ctx.arc(0,0,t.r+8,0,7); ctx.fill(); ctx.globalAlpha=1;
+  // 五角星
+  ctx.fillStyle='#ffd54a'; ctx.strokeStyle='#fff3c0'; ctx.lineWidth=2;
+  ctx.beginPath();
+  for(let i=0;i<10;i++){ const a=i*Math.PI/5-Math.PI/2; const rr=i%2?t.r*0.45:t.r; const x=Math.cos(a)*rr,y=Math.sin(a)*rr; i?ctx.lineTo(x,y):ctx.moveTo(x,y); }
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+
+function drawTrail(){
+  if(trail.length<2) return;
+  ctx.lineCap='round';
+  for(let i=1;i<trail.length;i++){ const a=i/trail.length;
+    ctx.globalAlpha=a*0.6; ctx.strokeStyle='#9fb8ff'; ctx.lineWidth=PROJ_R*a*0.9;
+    ctx.beginPath(); ctx.moveTo(trail[i-1].x,trail[i-1].y); ctx.lineTo(trail[i].x,trail[i].y); ctx.stroke(); }
+  ctx.globalAlpha=1;
+}
+function drawProj(){
+  if(!proj||!proj.alive) return;
+  ctx.save(); ctx.translate(proj.x,proj.y);
+  ctx.globalAlpha=0.4; ctx.fillStyle='#9af0ff'; ctx.beginPath(); ctx.arc(0,0,PROJ_R+7+Math.sin(performance.now()/120)*2,0,7); ctx.fill(); ctx.globalAlpha=1;
+  const g=ctx.createRadialGradient(-3,-3,1,0,0,PROJ_R);
+  g.addColorStop(0,'#ffffff'); g.addColorStop(0.5,'#8ee8ff'); g.addColorStop(1,'#2aa6ff');
+  ctx.fillStyle=g; ctx.beginPath(); ctx.arc(0,0,PROJ_R,0,7); ctx.fill();
+  ctx.restore();
+}
+
+function drawParticles(){
+  for(const p of particles){ const a=1-p.t/p.life;
+    if(p.kind==='ring'){ ctx.globalAlpha=a*0.8; ctx.strokeStyle=p.color; ctx.lineWidth=4; ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,7); ctx.stroke(); }
+    else if(p.kind==='spark'){ ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x,p.y,p.size,0,7); ctx.fill(); }
+    else { ctx.globalAlpha=a; ctx.fillStyle=p.color; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot||0); ctx.fillRect(-p.size/2,-p.size/2,p.size,p.size); ctx.restore(); }
+  }
+  ctx.globalAlpha=1;
+}
+function drawPopups(){
+  for(const p of popups){ const a=1-p.t/p.life; ctx.globalAlpha=a; ctx.fillStyle=p.color;
+    ctx.font=`900 ${24*p.scale}px sans-serif`; ctx.textAlign='center'; ctx.lineWidth=4; ctx.strokeStyle='rgba(0,0,0,.5)';
+    ctx.strokeText(p.text,p.x,p.y); ctx.fillText(p.text,p.x,p.y); }
+  ctx.globalAlpha=1; ctx.textAlign='left';
+}
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+
+//=========================== HUD ===========================
+function drawHUD(){
+  const w=canvas.width/DPR, h=canvas.height/DPR;
+  ctx.save();
+  ctx.fillStyle='rgba(10,8,28,.55)'; roundRect(14,14,238,64,16); ctx.fill();
+  ctx.fillStyle='#d6cfff'; ctx.font='700 15px sans-serif'; ctx.fillText(`第 ${curLevel+1} 关 · ${level.name}`,28,38);
+  ctx.fillStyle='#ffe066'; ctx.font='900 28px sans-serif'; ctx.fillText(score.toLocaleString(),28,68);
+
+  const remain=targets.filter(t=>!t.dead).length;
+  ctx.textAlign='right';
+  ctx.fillStyle='rgba(10,8,28,.55)'; roundRect(w-150,14,136,64,16); ctx.fill();
+  ctx.fillStyle='#ffd54a'; ctx.font='900 28px sans-serif'; ctx.fillText('★ '+remain,w-26,56);
+  ctx.textAlign='left';
+
+  // 剩余弹丸
+  for(let i=0;i<level.shots;i++){ const x=30+i*34,y=h-38;
+    ctx.beginPath(); ctx.arc(x,y,12,0,7); ctx.fillStyle=i<shotsLeft?'#8ee8ff':'rgba(255,255,255,.18)'; ctx.fill(); }
+  // 引力井数提示
+  if(level.anchors>0){ ctx.fillStyle='#b3a8ff'; ctx.font='600 14px sans-serif';
+    ctx.fillText('引力井 ×'+level.anchors+'（可拖动布置弹道）', 30, h-62); }
+
+  if(state===ST.AIM){ ctx.globalAlpha=0.55+0.35*Math.sin(performance.now()/300); ctx.fillStyle='#fff'; ctx.font='700 15px sans-serif'; ctx.textAlign='center';
+    ctx.fillText(predHit?'预测线已命中,松手发射!':'拖动瞄准 · 看预测线绕过星球', w/2, h-26); ctx.globalAlpha=1; ctx.textAlign='left'; }
+
+  // 静音
+  ctx.fillStyle='rgba(10,8,28,.55)'; roundRect(w/2-22,14,44,44,12); ctx.fill();
+  ctx.fillStyle='#d6cfff'; ctx.font='22px sans-serif'; ctx.textAlign='center'; ctx.fillText(Audio_.isMuted()?'🔇':'🔊',w/2,44); ctx.textAlign='left';
+  ctx.restore();
+}
+
+//=========================== UI 屏幕 ===========================
+const titleScreen=document.getElementById('titleScreen'),levelSelect=document.getElementById('levelSelect'),
+      resultModal=document.getElementById('resultModal'),levelGrid=document.getElementById('levelGrid');
+function showTitle(){ state=ST.MENU; titleScreen.classList.remove('hidden'); levelSelect.classList.add('hidden'); resultModal.classList.add('hidden'); }
+function showLevelSelect(){ state=ST.MENU; titleScreen.classList.add('hidden'); resultModal.classList.add('hidden'); levelSelect.classList.remove('hidden'); buildLevelGrid(); }
+function buildLevelGrid(){
+  levelGrid.innerHTML='';
+  LEVELS.forEach((lv,i)=>{ const c=document.createElement('div'); c.className='cell';
+    const un=levelUnlocked(i); if(!un) c.classList.add('locked');
+    const st=save.stars[i]||0;
+    c.innerHTML=`<div class="num">${un?(i+1):''}</div>`+(un?`<div class="stars">${'★'.repeat(st)}${'☆'.repeat(3-st)}</div>`:'');
+    if(un) c.onclick=()=>{ Audio_.click(); startLevel(i); };
+    levelGrid.appendChild(c); });
+}
+function startLevel(i){ titleScreen.classList.add('hidden'); levelSelect.classList.add('hidden'); resultModal.classList.add('hidden'); loadLevel(i); }
+function showResult(win,st,bonus){
+  resultModal.classList.remove('hidden');
+  document.getElementById('resTitle').textContent=win?'星域净化!':'再试一次';
+  document.getElementById('resStars').textContent=win?('★'.repeat(st)+'☆'.repeat(3-st)):'🌀';
+  document.getElementById('resScore').textContent='得分 '+score.toLocaleString()+(bonus>0?`（剩弹奖励 +${bonus}）`:'');
+  document.getElementById('resBest').textContent='最佳 '+(save.best[curLevel]||0).toLocaleString();
+  const nb=document.getElementById('resNext');
+  if(win&&curLevel<LEVELS.length-1){ nb.textContent='下一关'; nb.classList.remove('hidden'); }
+  else if(win){ nb.textContent='🎉 通关'; nb.classList.remove('hidden'); }
+  else nb.classList.add('hidden');
+}
+document.getElementById('playBtn').onclick=()=>{ Audio_.resume(); Audio_.click(); showLevelSelect(); };
+document.getElementById('lsBack').onclick=()=>{ Audio_.click(); showTitle(); };
+document.getElementById('resRetry').onclick=()=>{ Audio_.click(); startLevel(curLevel); };
+document.getElementById('resNext').onclick=()=>{ Audio_.click(); if(curLevel<LEVELS.length-1) startLevel(curLevel+1); else showLevelSelect(); };
+document.getElementById('resMenu').onclick=()=>{ Audio_.click(); showLevelSelect(); };
+
+//=========================== 指针 ===========================
+function getPos(e){ const r=canvas.getBoundingClientRect(); const t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left,y:t.clientY-r.top}; }
+canvas.addEventListener('pointerdown',e=>{ if(state===ST.MENU||state===ST.OVER) return; const p=getPos(e);
+  const w=canvas.width/DPR; if(p.y<58&&Math.abs(p.x-w/2)<22){ Audio_.toggleMute(); return; }
+  canvas.setPointerCapture(e.pointerId); onDown(p.x,p.y); });
+canvas.addEventListener('pointermove',e=>{ if(state===ST.MENU) return; const p=getPos(e); onMove(p.x,p.y); });
+canvas.addEventListener('pointerup',e=>{ if(state===ST.MENU) return; const p=getPos(e); onUp(p.x,p.y); });
+canvas.addEventListener('pointercancel',()=>{ drag=null; });
+['touchstart','touchmove','gesturestart'].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+
+//=========================== 启动 ===========================
+showTitle();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
